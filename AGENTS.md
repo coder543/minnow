@@ -2,6 +2,10 @@
 
 - Treat input checkpoints as read-only. Keep generated checkpoints in an explicit,
   user-selected model directory; do not assume a developer's home-directory layout.
+- Use upstream's LLaDA2.2 spelling; lowercase IDs and checkpoint prefixes use
+  llada2.2 without an extra dash.
+- Keep checksum verification in the explicit `validate` subcommand, separate from
+  normal model loading. Retain structural bounds and shape checks when loading.
 - Keep one resident weight copy per model instance, shared across its requests.
   Separate minnow instances are independent and may coexist when memory permits.
   Do not add cross-process model locks or inflate router memory reservations.

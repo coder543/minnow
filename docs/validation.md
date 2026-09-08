@@ -71,3 +71,10 @@ alone require about 60.6 GiB; the layerwise reference uses much less memory.
 Numerical agreement verifies the implementation, not task accuracy. Evaluate
 quantized model quality on representative tasks before selecting a deployment
 precision.
+
+## Checkpoint integrity
+
+Run `minnow --model models/mini-int8.mnw validate` to check the manifest and all
+weight/scale checksums without loading the model or initializing CUDA. Normal
+serving skips checksums; bounds, shapes, and encoding metadata are still checked.
+The existing `validate --reference DIRECTORY` mode performs numerical comparison.

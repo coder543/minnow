@@ -21,8 +21,9 @@ All integers and tensor elements are little-endian. The first 64 bytes are:
 Tensor data begins at offset 4096. Every code, scale, and manifest region begins
 on a 4096-byte boundary. Padding is zero. The manifest ends exactly at EOF and
 is limited to 128 MiB. The header, bounds, shape/encoding lengths, region overlap,
-and manifest digest are checked before loading; payload digests are checked
-during direct reads into final allocations.
+and tensor metadata are checked before loading. Normal loading does not compute
+checksums. Use `minnow --model CHECKPOINT.mnw validate` to verify the manifest
+and every weight/scale payload with bounded host memory and no GPU allocation.
 
 The named-map MessagePack manifest has fields `version` (1), `architecture`
 (`llada2_moe`), `model_id`, `assets`, and `tensors`. Required assets are

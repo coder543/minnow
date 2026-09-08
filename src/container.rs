@@ -182,6 +182,15 @@ pub struct Container {
 }
 impl Container {
     pub fn open(path: &Path) -> Result<Self> {
+        Self::open_impl(path, false)
+    }
+    /// Verify the manifest and every payload checksum without loading a model.
+    pub fn validate(path: &Path) -> Result<Self> {
+        let container = Self::open_impl(path, true)?;
+        crate::weights::WeightLoader::open(path)?.validate_payloads()?;
+        Ok(container)
+    }
+    fn open_impl(path: &Path, verify_checksum: bool) -> Result<Self> {
         let mut file = File::open(path)?;
         let size = file.metadata()?.len();
         let mut header = [0u8; HEADER_BYTES];
@@ -205,10 +214,12 @@ impl Container {
         file.seek(SeekFrom::Start(offset))?;
         let mut bytes = vec![0; length as usize];
         file.read_exact(&mut bytes)?;
-        ensure!(
-            blake3::hash(&bytes).as_bytes() == &header[32..64],
-            "minnow manifest checksum mismatch"
-        );
+        if verify_checksum {
+            ensure!(
+                blake3::hash(&bytes).as_bytes() == &header[32..64],
+                "minnow manifest checksum mismatch"
+            );
+        }
         let manifest: Manifest =
             rmp_serde::from_slice(&bytes).context("decoding MessagePack model manifest")?;
         ensure!(

@@ -100,6 +100,22 @@ fn corrupt_payload_and_manifest_are_rejected() -> Result<()> {
     let source = fixture.0.join("source");
     let dest = fixture.0.join("corrupt.mnw");
     let container = convert(&source, &dest, &Conversion::default())?;
+    Container::validate(&dest)?;
+    let validated = std::process::Command::new(env!("CARGO_BIN_EXE_minnow"))
+        .env("CUDA_VISIBLE_DEVICES", "")
+        .arg("--model")
+        .arg(&dest)
+        .arg("validate")
+        .output()?;
+    assert!(
+        validated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&validated.stderr)
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&validated.stdout)?["valid"],
+        true
+    );
     let tensor = &container.manifest.tensors["model.word_embeddings.weight"];
     let mut file = std::fs::OpenOptions::new()
         .read(true)
@@ -108,10 +124,9 @@ fn corrupt_payload_and_manifest_are_rejected() -> Result<()> {
     file.seek(SeekFrom::Start(tensor.data.offset))?;
     file.write_all(&[0x7f; 4])?;
     file.sync_all()?;
-    let error = Model::load(&dest, DType::F32, &Device::Cpu)
-        .err()
-        .unwrap()
-        .to_string();
+    // Serving checks structure but deliberately leaves payload integrity to validate.
+    Model::load(&dest, DType::F32, &Device::Cpu)?;
+    let error = Container::validate(&dest).err().unwrap().to_string();
     assert!(error.contains("checksum"), "{error}");
     file.seek(SeekFrom::Start(8))?;
     let mut bytes = [0u8; 8];
@@ -121,7 +136,7 @@ fn corrupt_payload_and_manifest_are_rejected() -> Result<()> {
     file.write_all(&[0xc1])?;
     file.sync_all()?;
     assert!(
-        Container::open(&dest)
+        Container::validate(&dest)
             .err()
             .unwrap()
             .to_string()
@@ -267,6 +282,31 @@ fn nvfp4_container_preserves_native_scales_and_rejects_requantization() -> Resul
     )?;
     let copy = fixture.0.join("copy.mnw");
     let copied = convert(&dest, &copy, &Conversion::default())?;
+    Container::validate(&copy)?;
+    let scale = copied
+        .manifest
+        .tensors
+        .values()
+        .find_map(|t| t.scales.as_ref())
+        .unwrap();
+    let mut damaged = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&copy)?;
+    damaged.seek(SeekFrom::Start(scale.offset))?;
+    let mut byte = [0u8];
+    damaged.read_exact(&mut byte)?;
+    byte[0] ^= 1;
+    damaged.seek(SeekFrom::Start(scale.offset))?;
+    damaged.write_all(&byte)?;
+    damaged.sync_all()?;
+    assert!(
+        Container::validate(&copy)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("checksum")
+    );
     for (name, t) in &c.manifest.tensors {
         if t.encoding != Encoding::Nvfp4 {
             continue;

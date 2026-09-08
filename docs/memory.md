@@ -4,7 +4,12 @@ Each minnow instance holds one resident weight set, shared across its requests.
 Independent instances can coexist when memory permits. Checkpoint data is
 read with Linux direct I/O into bounded staging buffers and final tensor
 allocations. Loading does not use mmap or construct a complete CPU model before
-copying it to CUDA. Use a filesystem that supports `O_DIRECT`; unsupported
+copying it to CUDA. Expert reads use up to sixteen reusable 8 MiB buffers,
+plus an 8 MiB streaming buffer for large tensors. Matching-dtype CUDA uploads
+write directly into final storage without a temporary device tensor. Checksums
+are verified separately with `minnow --model CHECKPOINT.mnw validate`.
+See [loader measurements](loading.md) for timings and profiling.
+Use a filesystem that supports `O_DIRECT`; unsupported
 filesystems produce an error rather than silently switching loading modes.
 
 `--model` accepts a safetensors checkpoint directory or a self-contained `.mnw`

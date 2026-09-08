@@ -115,10 +115,11 @@ enum Command {
         #[arg(long)]
         cached: bool,
     },
-    /// Compare reference tensors and cached execution against full execution.
+    /// Verify .mnw checksums, or compare model execution when --reference is supplied.
     Validate {
+        /// Compare tensors with a reference fixture instead of checking the container.
         #[arg(long)]
-        reference: PathBuf,
+        reference: Option<PathBuf>,
         #[arg(long, default_value_t = 0.0001)]
         max_abs_error: f64,
         /// Per-element allowance: abs(actual-reference) <= atol + rtol*abs(reference).
@@ -281,6 +282,17 @@ async fn main() -> Result<()> {
             );
             return Ok(());
         }
+        Command::Validate {
+            reference: None, ..
+        } => {
+            let start = Instant::now();
+            let container = minnow::container::Container::validate(&model_path)?;
+            println!(
+                "{}",
+                json!({"path":model_path,"valid":true,"tensors":container.manifest.tensors.len(),"weight_bytes":container.manifest.weight_bytes(),"seconds":start.elapsed().as_secs_f64()})
+            );
+            return Ok(());
+        }
         Command::Inspect => {
             println!(
                 "{}",
@@ -388,6 +400,8 @@ async fn main() -> Result<()> {
             max_abs_error,
             max_relative_error,
         } => {
+            let reference =
+                reference.context("--reference is required for numerical validation")?;
             ensure!(
                 max_abs_error.is_finite()
                     && max_abs_error >= 0.0

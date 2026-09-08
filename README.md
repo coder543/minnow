@@ -67,7 +67,8 @@ accumulation. INT8 uses groups of 128 weights with FP16 scales and dequantizes
 into BF16 tensor-core registers. Both change model numerics; throughput results
 are not evidence of equal answer quality. Convert from floating-point weights.
 `--tensor-rules` permits mixed precision by layer or projection.
-See [formats and conversion](docs/model-format.md).
+Use `minnow --model models/mini-int8.mnw validate` to verify checkpoint
+checksums separately from loading. See [formats and conversion](docs/model-format.md).
 
 NVFP4 uses fused gate/up/SiLU kernels and GPU routing for 32-token decode
 blocks by default. `--host-routing` and `--unfused-activation` provide comparison

@@ -1,0 +1,99 @@
+{
+  "hardware": "NVIDIA GB10, CUDA 13.0, local NVMe, Linux aarch64",
+  "units": "GB/s is decimal file bytes divided by load seconds",
+  "runs_per_checkpoint": 3,
+  "models": {
+    "llada2.2-mini-bf16": {
+      "file_bytes": 32522059577,
+      "seconds": [
+        7.01458183,
+        6.861844543,
+        6.792482313
+      ],
+      "median_seconds": 6.861844543,
+      "median_gb_per_second": 4.739550622751554
+    },
+    "llada2.2-mini-int8-packed": {
+      "file_bytes": 17461885230,
+      "seconds": [
+        4.003713401,
+        4.030469623,
+        4.025735336
+      ],
+      "median_seconds": 4.025735336,
+      "median_gb_per_second": 4.337564139859789
+    },
+    "llada2.2-mini-nvfp4": {
+      "file_bytes": 10528943618,
+      "seconds": [
+        3.301089757,
+        2.739705873,
+        3.300728983
+      ],
+      "median_seconds": 3.300728983,
+      "median_gb_per_second": 3.189884317139648
+    },
+    "llada2.2-flash-nvfp4": {
+      "file_bytes": 62249301239,
+      "seconds": [
+        13.500562322,
+        13.850451429,
+        13.87893129
+      ],
+      "median_seconds": 13.850451429,
+      "median_gb_per_second": 4.494387894726865
+    },
+    "llada2.2-flash-int8-packed": {
+      "file_bytes": 107497075539,
+      "seconds": [
+        26.277811767,
+        19.734340554,
+        19.686878038
+      ],
+      "median_seconds": 19.734340554,
+      "median_gb_per_second": 5.447208901906336
+    }
+  },
+  "profiles": {
+    "before": {
+      "bytes": 17449541120.0,
+      "reads": 29583.0,
+      "read_seconds": 10.09240179,
+      "checksum_seconds": 9.153953295,
+      "consume_seconds": 1.648472923,
+      "load_seconds": 21.641241085
+    },
+    "after": {
+      "bytes": 17449541120.0,
+      "reads": 14991.0,
+      "read_seconds": 16.243249567,
+      "read_wall_seconds": 2.675843962,
+      "staging_seconds": 0.034568717,
+      "checksum_seconds": 4.6528e-05,
+      "consume_seconds": 0.684125515,
+      "load_seconds": 4.177340966
+    },
+    "flash_int8_after": {
+      "bytes": 107481717760.0,
+      "reads": 24715.0,
+      "read_seconds": 98.992653601,
+      "read_wall_seconds": 11.510747714,
+      "staging_seconds": 0.036081734,
+      "checksum_seconds": 5.2768e-05,
+      "consume_seconds": 2.629903996,
+      "load_seconds": 20.03702495,
+      "cuda_allocation_seconds": 5.753564864
+    }
+  },
+  "ssd_read_gb_per_second": 13.134456562,
+  "cuda_api_counts": {
+    "mini_before": {
+      "allocation_calls": 29918,
+      "kernel_launches": 29583
+    },
+    "mini_after": {
+      "allocation_calls": 373,
+      "kernel_launches": 19
+    }
+  }
+}
