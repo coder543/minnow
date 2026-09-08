@@ -178,12 +178,40 @@ pub fn quantize_rows(x: &Tensor) -> Result<Tensor> {
     Ok(Tensor::from_vec(result, (rows, k), x.device())?)
 }
 pub(super) fn cpu_grouped(x: &Tensor, w: &Weights, segments: &[(usize, usize)]) -> Result<Tensor> {
+    use candle_core::Storage;
+    use rayon::prelude::*;
     let (_, out, input) = w.shape;
+    ensure!(
+        input.is_multiple_of(64)
+            && input > 0
+            && out.is_multiple_of(8)
+            && x.dim(1)? == input
+            && w.codes.is_contiguous()
+            && w.scales.is_contiguous(),
+        "invalid CPU NVFP4 shape/layout"
+    );
     let globals = w
         .global_scales
         .as_ref()
         .context("missing NVFP4 tensor scales")?
         .to_vec1::<f32>()?;
+    ensure!(
+        globals.len() == w.shape.0 && globals.iter().all(|g| g.is_finite() && *g > 0.),
+        "invalid NVFP4 tensor scales"
+    );
+    let (codes, cl) = w.codes.storage_and_layout();
+    let (scales, sl) = w.scales.storage_and_layout();
+    let (Storage::Cpu(codes), Storage::Cpu(scales)) = (&*codes, &*scales) else {
+        anyhow::bail!("CPU quantized weights must reside on CPU");
+    };
+    let codes =
+        &codes.as_slice::<u8>()?[cl.start_offset()..cl.start_offset() + cl.shape().elem_count()];
+    let scales =
+        &scales.as_slice::<u8>()?[sl.start_offset()..sl.start_offset() + sl.shape().elem_count()];
+    ensure!(
+        codes.len() == w.shape.0 * out * input / 2 && scales.len() == codes.len() / 8,
+        "invalid CPU NVFP4 payload"
+    );
     let selected = quantize_rows(x)?;
     let mut result = Vec::new();
     let mut row = 0;
@@ -192,16 +220,23 @@ pub(super) fn cpu_grouped(x: &Tensor, w: &Weights, segments: &[(usize, usize)]) 
             e < w.shape.0 && n > 0 && row + n <= x.dim(0)?,
             "invalid expert segment"
         );
-        let c = w
-            .codes
-            .narrow(0, e * out * input / 2, out * input / 2)?
-            .to_vec1::<u8>()?;
-        let s = w
-            .scales
-            .narrow(0, e * out * input / 16, out * input / 16)?
-            .to_vec1::<u8>()?;
-        let (c, s) = pack(&c, &s, input, true)?;
-        let values = decode(&c, &s, globals[e])?;
+        let c = &codes[e * out * input / 2..(e + 1) * out * input / 2];
+        let s = &scales[e * out * input / 16..(e + 1) * out * input / 16];
+        ensure!(s.iter().all(|s| *s < 127), "invalid NVFP4 scales");
+        let mut values = vec![0f32; out * input];
+        values
+            .par_chunks_mut(input)
+            .enumerate()
+            .for_each(|(r, values)| {
+                for (k, value) in values.iter_mut().enumerate() {
+                    let tile = r / 8 * (input / 64) + k / 64;
+                    let ci =
+                        tile * 256 + (k % 64 / 32 * 32 + r % 8 * 4 + k % 32 / 8) * 4 + k % 8 / 2;
+                    let code = (c[ci] >> (k % 2 * 4)) & 15;
+                    let v = FP4[(code & 7) as usize] * if code & 8 == 0 { 1. } else { -1. };
+                    *value = (v * e4m3(s[tile * 32 + r % 8 * 4 + k % 64 / 16])) * globals[e];
+                }
+            });
         let weight = Tensor::from_vec(values, (out, input), x.device())?;
         result.push(
             selected

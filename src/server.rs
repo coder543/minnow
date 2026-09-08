@@ -67,6 +67,7 @@ struct Info {
     cache_budget_bytes: usize,
     parallel: usize,
     batch_wait_us: u64,
+    attention_backend: &'static str,
 }
 impl Info {
     fn accepts_model(&self, id: &str) -> bool {
@@ -507,7 +508,7 @@ async fn health(State(app): State<App>) -> std::result::Result<Json<Value>, ApiE
     }
     Ok(Json(
         json!({"status":"ok","model":app.info.model_id,"max_context":app.info.max_context,"queued_requests":app.tx.max_capacity()-app.queue.available_permits(),
-            "parallel":app.info.parallel,"batching":app.batch_metrics.value()}),
+            "parallel":app.info.parallel,"batching":app.batch_metrics.value(),"attention_backend":app.info.attention_backend}),
     ))
 }
 fn model_info(info: &Info) -> Value {
@@ -610,6 +611,7 @@ pub async fn serve(model: Model, codec: TextCodec, config: ServeConfig) -> Resul
             cache_budget_bytes,
             parallel: config.parallel,
             batch_wait_us: config.batch_wait_us,
+            attention_backend: model.attention_backend(),
         }),
         active: Arc::new(Mutex::new(vec![None; config.parallel])),
         cache_slots,

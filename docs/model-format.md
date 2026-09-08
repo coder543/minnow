@@ -88,9 +88,10 @@ checkpoints are read-only inputs.
 
 CUDA's INT8 path dequantizes into registers and uses BF16 tensor-core operands
 with FP32 accumulation. NVFP4 uses native FP4 tensor cores. Neither stores an
-expanded model in system/GPU RAM. CPU execution expands one selected expert for
-small-fixture tests. Shared experts, attention, routers, embeddings, and the
-output head retain source precision.
+expanded model in system/GPU RAM. CPU execution expands one selected expert at
+a time into an FP32 GEMM buffer. Conversion retains source precision for shared
+experts, attention, routers, embeddings, and the output head; the CPU runtime
+loads those unquantized weights as FP32.
 
 ## Native NVFP4
 
@@ -124,8 +125,9 @@ and rounded to BF16. No dequantized weights are written to memory. This path
 quantizes both weights and activations.
 
 The separate `compute_120f` PTX module requires CUDA 13 and SM120/121. There is
-no CUDA emulation fallback. CPU execution is an independent small-fixture oracle,
-not a production backend. GPU tests compare activation codes/scales exactly with
+no CUDA emulation fallback. The slower CPU software path supports serving and
+also provides an independent numerical oracle. See [CPU execution](int8-optimizations.md#cpu-execution).
+GPU tests compare activation codes/scales exactly with
 the scalar encoder, then compare native MMA against independently dequantized
 operands, including uneven/repeated expert segments and all supported row tiles.
 

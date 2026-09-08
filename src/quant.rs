@@ -25,34 +25,73 @@ impl Weights {
         if self.encoding == Encoding::Nvfp4 {
             return nvfp4::cpu_grouped(x, self, segments);
         }
-        // CPU fallback expands one selected expert, never a whole model. This
-        // path is an oracle/small-fixture fallback, not the CUDA serving path.
-        let mut outputs = Vec::new();
+        // Borrow packed storage and expand just one selected expert directly
+        // into its FP32 GEMM buffer. No copies of codes/scales or layout repacking.
+        use candle_core::Storage;
+        use rayon::prelude::*;
         let (_, out, input) = self.shape;
-        let elements = out * input;
-        let bytes = elements;
-        let scale_count = elements / self.group_size;
+        ensure!(
+            self.encoding.int8()
+                && input > 0
+                && out > 0
+                && x.dim(1)? == input
+                && self.codes.is_contiguous()
+                && self.scales.is_contiguous(),
+            "invalid CPU INT8 weights/input"
+        );
+        let (codes, cl) = self.codes.storage_and_layout();
+        let (scales, sl) = self.scales.storage_and_layout();
+        let (Storage::Cpu(codes), Storage::Cpu(scales)) = (&*codes, &*scales) else {
+            bail!("CPU quantized weights must reside on CPU");
+        };
+        let codes = &codes.as_slice::<u8>()?
+            [cl.start_offset()..cl.start_offset() + cl.shape().elem_count()];
+        let scales = &scales.as_slice::<f16>()?
+            [sl.start_offset()..sl.start_offset() + sl.shape().elem_count()];
+        ensure!(
+            [16, 32, 64, 128].contains(&self.group_size)
+                && input.is_multiple_of(self.group_size)
+                && (!self.encoding.packed() || out.is_multiple_of(8))
+                && codes.len() == self.shape.0 * out * input
+                && scales.len() == codes.len() / self.group_size,
+            "invalid CPU INT8 payload"
+        );
+        let mut outputs = Vec::new();
         let mut row = 0;
         for &(e, n) in segments {
             ensure!(
                 e < self.shape.0 && n > 0 && row + n <= x.dim(0)?,
                 "invalid expert segment"
             );
-            let codes = self.codes.narrow(0, e * bytes, bytes)?.to_vec1::<u8>()?;
-            let scales = self
-                .scales
-                .narrow(0, e * scale_count, scale_count)?
-                .to_vec1::<f16>()?;
-            let scales: Vec<u8> = scales
-                .iter()
-                .flat_map(|v| v.to_bits().to_le_bytes())
-                .collect();
-            let values = decode_matrix(&codes, &scales, self.encoding, self.group_size, input)?;
-            // Match the BF16 tensor-core operand conversion, including for F32
-            // fixture activations, so this is an independent CUDA oracle.
-            let weight = Tensor::from_vec(values, (out, input), x.device())?
-                .to_dtype(DType::BF16)?
-                .to_dtype(x.dtype())?;
+            let c = &codes[e * out * input..(e + 1) * out * input];
+            let s =
+                &scales[e * out * input / self.group_size..(e + 1) * out * input / self.group_size];
+            ensure!(
+                s.iter().all(|s| s.is_finite() && *s > f16::ZERO),
+                "invalid quantized scale"
+            );
+            let mut values = vec![0f32; out * input];
+            values
+                .par_chunks_mut(input)
+                .enumerate()
+                .for_each(|(r, values)| {
+                    for (k, value) in values.iter_mut().enumerate() {
+                        let (ci, si) = if self.encoding.packed() {
+                            (
+                                ((r / 8 * (input / 16) + k / 16) * 32 + r % 8 * 4 + k % 8 / 2) * 4
+                                    + k % 2
+                                    + (k % 16 / 8) * 2,
+                                (r / 8 * (input / self.group_size) + k / self.group_size) * 8
+                                    + r % 8,
+                            )
+                        } else {
+                            (r * input + k, (r * input + k) / self.group_size)
+                        };
+                        // Preserve the CUDA BF16 operand rounding for weight-only INT8.
+                        *value = bf16::from_f32(c[ci] as i8 as f32 * s[si].to_f32()).to_f32();
+                    }
+                });
+            let weight = Tensor::from_vec(values, (out, input), x.device())?.to_dtype(x.dtype())?;
             outputs.push(x.narrow(0, row, n)?.matmul(&weight.t()?)?);
             row += n;
         }

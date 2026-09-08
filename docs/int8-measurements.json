@@ -1,0 +1,1051 @@
+{
+  "hardware": "NVIDIA GB10 SM121, CUDA 13",
+  "baseline_commit": "0a2366f",
+  "workspace_cache_mib": 512,
+  "prefill": {
+    "before-llada2.2-mini-bf16-prefill": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.11478731466666665,
+        "prompt_tokens": 512,
+        "seconds": [
+          0.114595207,
+          0.115757533,
+          0.114009204
+        ],
+        "tokens_per_second": 4460.423187760841,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.23688561066666666,
+        "prompt_tokens": 2048,
+        "seconds": [
+          0.236041281,
+          0.236800373,
+          0.237815178
+        ],
+        "tokens_per_second": 8645.52301947053,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.4042144303333333,
+        "prompt_tokens": 4096,
+        "seconds": [
+          0.406790134,
+          0.402252223,
+          0.403600934
+        ],
+        "tokens_per_second": 10133.235462727678,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 2,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.8304455169999999,
+        "prompt_tokens": 8192,
+        "seconds": [
+          0.831230406,
+          0.828882234,
+          0.831223911
+        ],
+        "tokens_per_second": 9864.584529992713,
+        "warmups": 2
+      }
+    ],
+    "before-llada2.2-mini-int8-packed-prefill": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.08995271433333334,
+        "prompt_tokens": 512,
+        "seconds": [
+          0.089888842,
+          0.089973195,
+          0.089996106
+        ],
+        "tokens_per_second": 5691.879381234755,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.25373679166666663,
+        "prompt_tokens": 2048,
+        "seconds": [
+          0.253114858,
+          0.256000568,
+          0.252094949
+        ],
+        "tokens_per_second": 8071.356095218751,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.4827771633333333,
+        "prompt_tokens": 4096,
+        "seconds": [
+          0.481897927,
+          0.482142392,
+          0.484291171
+        ],
+        "tokens_per_second": 8484.245550719885,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 2,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 1.001682951,
+        "prompt_tokens": 8192,
+        "seconds": [
+          1.000071417,
+          0.999934473,
+          1.005042963
+        ],
+        "tokens_per_second": 8178.236428823874,
+        "warmups": 2
+      }
+    ],
+    "before-llada2.2-mini-nvfp4-prefill": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.049375062,
+        "prompt_tokens": 512,
+        "seconds": [
+          0.04993155,
+          0.049372907,
+          0.048820729
+        ],
+        "tokens_per_second": 10369.607232088134,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.13196130266666667,
+        "prompt_tokens": 2048,
+        "seconds": [
+          0.133242696,
+          0.13132019,
+          0.131321022
+        ],
+        "tokens_per_second": 15519.701295865756,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.25907915566666667,
+        "prompt_tokens": 4096,
+        "seconds": [
+          0.258852088,
+          0.258468246,
+          0.259917133
+        ],
+        "tokens_per_second": 15809.840006078863,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 2,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.5534331543333334,
+        "prompt_tokens": 8192,
+        "seconds": [
+          0.554476333,
+          0.550329384,
+          0.555493746
+        ],
+        "tokens_per_second": 14802.148978349695,
+        "warmups": 2
+      }
+    ],
+    "before-llada2.2-flash-nvfp4-prefill": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.25469564699999997,
+        "prompt_tokens": 512,
+        "seconds": [
+          0.254456835,
+          0.254646996,
+          0.25498311
+        ],
+        "tokens_per_second": 2010.242444386967,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.5830404986666666,
+        "prompt_tokens": 2048,
+        "seconds": [
+          0.581959693,
+          0.584966524,
+          0.582195279
+        ],
+        "tokens_per_second": 3512.620486370148,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 1.0584946413333334,
+        "prompt_tokens": 4096,
+        "seconds": [
+          1.060443979,
+          1.057417148,
+          1.057622797
+        ],
+        "tokens_per_second": 3869.6464205434913,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 2,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 2.228084843,
+        "prompt_tokens": 8192,
+        "seconds": [
+          2.225937108,
+          2.229554792,
+          2.228762629
+        ],
+        "tokens_per_second": 3676.7002054418626,
+        "warmups": 2
+      }
+    ],
+    "before-llada2.2-flash-int8-packed-prefill": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.5024390976666667,
+        "prompt_tokens": 512,
+        "seconds": [
+          0.503084498,
+          0.503684054,
+          0.500548741
+        ],
+        "tokens_per_second": 1019.028977596955,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 1.2878927776666667,
+        "prompt_tokens": 2048,
+        "seconds": [
+          1.282515198,
+          1.2930129639999999,
+          1.288150171
+        ],
+        "tokens_per_second": 1590.194490965664,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 2.3390111653333334,
+        "prompt_tokens": 4096,
+        "seconds": [
+          2.337909894,
+          2.3421114530000002,
+          2.337012149
+        ],
+        "tokens_per_second": 1751.1673568331503,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 2,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 4.779010835333334,
+        "prompt_tokens": 8192,
+        "seconds": [
+          4.781313731,
+          4.774663608,
+          4.781055167
+        ],
+        "tokens_per_second": 1714.1622570580785,
+        "warmups": 2
+      }
+    ],
+    "after-llada2.2-mini-int8-packed-prefill": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.07928818966666668,
+        "prompt_tokens": 512,
+        "seconds": [
+          0.079956658,
+          0.079257886,
+          0.078650025
+        ],
+        "tokens_per_second": 6457.4560492866,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.22008972166666665,
+        "prompt_tokens": 2048,
+        "seconds": [
+          0.218121526,
+          0.221552287,
+          0.220595352
+        ],
+        "tokens_per_second": 9305.295969712595,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.41973437666666663,
+        "prompt_tokens": 4096,
+        "seconds": [
+          0.417914337,
+          0.420846774,
+          0.420442019
+        ],
+        "tokens_per_second": 9758.552617320765,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 2,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.8763009986666667,
+        "prompt_tokens": 8192,
+        "seconds": [
+          0.876569707,
+          0.876610329,
+          0.87572296
+        ],
+        "tokens_per_second": 9348.386014011754,
+        "warmups": 2
+      }
+    ],
+    "after-llada2.2-flash-int8-packed-prefill": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.49140994833333335,
+        "prompt_tokens": 512,
+        "seconds": [
+          0.490919972,
+          0.493254341,
+          0.490055532
+        ],
+        "tokens_per_second": 1041.8999487830881,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 1.2391341343333333,
+        "prompt_tokens": 2048,
+        "seconds": [
+          1.2340552630000001,
+          1.239551524,
+          1.2437956159999999
+        ],
+        "tokens_per_second": 1652.766995319554,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 2.2102619293333334,
+        "prompt_tokens": 4096,
+        "seconds": [
+          2.208852911,
+          2.211051012,
+          2.210881865
+        ],
+        "tokens_per_second": 1853.1740268609021,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 2,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 4.554500181,
+        "prompt_tokens": 8192,
+        "seconds": [
+          4.553556654,
+          4.549902809,
+          4.5600410799999995
+        ],
+        "tokens_per_second": 1798.6605937956817,
+        "warmups": 2
+      }
+    ]
+  },
+  "refinement": {
+    "before-llada2.2-mini-bf16-refinement": [
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.035120073200000004,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 0
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.0353951962,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 1024
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.036925076099999996,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 4096
+      }
+    ],
+    "before-llada2.2-mini-int8-packed-refinement": [
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.0252690697,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 0
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.0259520987,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 1024
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.0274338983,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 4096
+      }
+    ],
+    "before-llada2.2-mini-nvfp4-refinement": [
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.016180080899999998,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 0
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.0165244012,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 1024
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.0181108397,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 4096
+      }
+    ],
+    "before-llada2.2-flash-nvfp4-refinement": [
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.07994763790000001,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 0
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.07898557710000001,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 1024
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.0819322082,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 4096
+      }
+    ],
+    "before-llada2.2-flash-int8-packed-refinement": [
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.1307107665,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 0
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.1316860052,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 1024
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.1338846022,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 4096
+      }
+    ],
+    "after-llada2.2-mini-int8-packed-refinement": [
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.0214758023,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 0
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.0221851468,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 1024
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.0240335956,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 4096
+      }
+    ],
+    "after-llada2.2-flash-int8-packed-refinement": [
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.121533453,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 0
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.1214492006,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 1024
+      },
+      {
+        "batched_experts": true,
+        "cached_forward_seconds": 0.1244531207,
+        "current_tokens": 32,
+        "dtype": "BF16",
+        "iterations": 10,
+        "prefix_tokens": 4096
+      }
+    ]
+  },
+  "responses": {
+    "mini": [
+      {
+        "name": "lhc",
+        "before_tok_s": 64.40323043173527,
+        "after_tok_s": 75.59203228119704,
+        "text_tokens": 190.0,
+        "refinements_per_block": 17.0,
+        "finish_reason": "stop",
+        "identical_tokens_and_steps": true
+      },
+      {
+        "name": "react_typescript",
+        "before_tok_s": 202.60177447482084,
+        "after_tok_s": 239.20462518588116,
+        "text_tokens": 512.0,
+        "refinements_per_block": 6.0588235294117645,
+        "finish_reason": "length",
+        "identical_tokens_and_steps": true
+      },
+      {
+        "name": "fellowship",
+        "before_tok_s": 50.85292445790563,
+        "after_tok_s": 60.09995984022082,
+        "text_tokens": 512.0,
+        "refinements_per_block": 23.705882352941178,
+        "finish_reason": "length",
+        "identical_tokens_and_steps": true
+      }
+    ],
+    "flash": [
+      {
+        "name": "lhc",
+        "before_tok_s": 18.784752193620108,
+        "after_tok_s": 20.36028147301569,
+        "text_tokens": 358.0,
+        "refinements_per_block": 12.333333333333334,
+        "finish_reason": "stop",
+        "identical_tokens_and_steps": true
+      },
+      {
+        "name": "react_typescript",
+        "before_tok_s": 43.655467181987625,
+        "after_tok_s": 48.09493676596636,
+        "text_tokens": 512.0,
+        "refinements_per_block": 5.470588235294118,
+        "finish_reason": "length",
+        "identical_tokens_and_steps": true
+      },
+      {
+        "name": "fellowship",
+        "before_tok_s": 14.080763724361127,
+        "after_tok_s": 15.459127277186024,
+        "text_tokens": 512.0,
+        "refinements_per_block": 16.58823529411765,
+        "finish_reason": "length",
+        "identical_tokens_and_steps": true
+      }
+    ]
+  },
+  "cpu_prefill": {
+    "before": [
+      {
+        "attention_chunk_tokens": 1024,
+        "dtype": "F32",
+        "forwards": 1,
+        "iterations": 1,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 14.123659257,
+        "prompt_tokens": 32,
+        "seconds": [
+          14.123659257
+        ],
+        "tokens_per_second": 2.2657017857564137,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "dtype": "F32",
+        "forwards": 1,
+        "iterations": 1,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 43.718132723,
+        "prompt_tokens": 256,
+        "seconds": [
+          43.718132723
+        ],
+        "tokens_per_second": 5.855693828966283,
+        "warmups": 2
+      }
+    ],
+    "cpu": [
+      {
+        "attention_chunk_tokens": 1024,
+        "dtype": "F32",
+        "forwards": 1,
+        "iterations": 1,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 2.33815268,
+        "prompt_tokens": 32,
+        "seconds": [
+          2.33815268
+        ],
+        "tokens_per_second": 13.686018143177888,
+        "warmups": 2
+      },
+      {
+        "attention_chunk_tokens": 1024,
+        "dtype": "F32",
+        "forwards": 1,
+        "iterations": 1,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 10.524811933,
+        "prompt_tokens": 256,
+        "seconds": [
+          10.524811933
+        ],
+        "tokens_per_second": 24.32347500645834,
+        "warmups": 2
+      }
+    ]
+  },
+  "host_routed_prefill_tile_sweep_4096": {
+    "prefill-mini-pair-tile32": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.44339891266666664,
+        "prompt_tokens": 4096,
+        "seconds": [
+          0.444071397,
+          0.442152953,
+          0.443972388
+        ],
+        "tokens_per_second": 9237.731268590738,
+        "warmups": 2
+      }
+    ],
+    "prefill-mini-pair-tile64": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.46253994800000003,
+        "prompt_tokens": 4096,
+        "seconds": [
+          0.462184521,
+          0.463877637,
+          0.461557686
+        ],
+        "tokens_per_second": 8855.451334983934,
+        "warmups": 2
+      }
+    ],
+    "prefill-flash-pair-tile32": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 2.3560813720000002,
+        "prompt_tokens": 4096,
+        "seconds": [
+          2.374841321,
+          2.346744399,
+          2.346658396
+        ],
+        "tokens_per_second": 1738.4798541669381,
+        "warmups": 2
+      }
+    ],
+    "prefill-flash-pair-tile64": [
+      {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "flash_attention": true,
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 3,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 2.5081749106666664,
+        "prompt_tokens": 4096,
+        "seconds": [
+          2.468917629,
+          2.523206379,
+          2.532400724
+        ],
+        "tokens_per_second": 1633.05995231062,
+        "warmups": 2
+      }
+    ]
+  },
+  "nsight_compute_projection": {
+    "before-k4096-m6": {
+      "gpu__time_duration.sum": [
+        "1.134016",
+        "ms"
+      ],
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": [
+        "4.682461",
+        "%"
+      ],
+      "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": [
+        "95.346758",
+        "%"
+      ],
+      "launch__registers_per_thread": [
+        "56",
+        "register/thread"
+      ]
+    },
+    "after-k4096-m6": {
+      "gpu__time_duration.sum": [
+        "1.150208",
+        "ms"
+      ],
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": [
+        "4.533093",
+        "%"
+      ],
+      "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": [
+        "93.211923",
+        "%"
+      ],
+      "launch__registers_per_thread": [
+        "53",
+        "register/thread"
+      ]
+    },
+    "before-k4096-m128": {
+      "gpu__time_duration.sum": [
+        "3.633600",
+        "ms"
+      ],
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": [
+        "11.397838",
+        "%"
+      ],
+      "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": [
+        "88.837749",
+        "%"
+      ],
+      "launch__registers_per_thread": [
+        "56",
+        "register/thread"
+      ]
+    },
+    "after-k4096-m128": {
+      "gpu__time_duration.sum": [
+        "3.270240",
+        "ms"
+      ],
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": [
+        "12.815228",
+        "%"
+      ],
+      "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": [
+        "80.178439",
+        "%"
+      ],
+      "launch__registers_per_thread": [
+        "53",
+        "register/thread"
+      ]
+    }
+  }
+}

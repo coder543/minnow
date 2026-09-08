@@ -13,6 +13,7 @@ fn app() -> (App, mpsc::Receiver<Option<Job>>) {
             stopping: Arc::new(AtomicBool::new(false)),
             codec: Arc::new(TextCodec::fixture()),
             info: Arc::new(Info {
+                attention_backend: "materialized",
                 model_id: "test".into(),
                 model_family: "LLaDA2.2-mini",
                 model_path: "fixture".into(),
@@ -218,6 +219,7 @@ async fn api_errors_and_props_work_without_a_model() {
         5
     );
     assert_eq!(props["default_generation_settings"]["n_ctx"], 128);
+    assert_eq!(props["minnow"]["attention_backend"], "materialized");
     let response = router
         .clone()
         .oneshot(

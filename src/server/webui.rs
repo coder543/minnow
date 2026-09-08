@@ -27,7 +27,7 @@ async fn props(State(app): State<App>) -> Json<Value> {
                 "samplers":["top_k","top_p","temperature"],"backend_sampling":false,"speculative.n_max":0,"speculative.n_min":0,"speculative.p_min":0,"timings_per_token":true,"post_sampling_probs":false,"lora":[],
                 "threshold":o.threshold,"editing_threshold":o.editing_threshold,"max_post_steps":o.max_post_steps},
             "next_token":{"has_next_token":false,"has_new_line":false,"n_remain":0,"n_decoded":0,"stopping_word":""}},
-        "minnow":{"block_size":32,"generation_defaults":o,"stream_resumption":false,"strict_tool_schemas":false,
+        "minnow":{"block_size":32,"attention_backend":app.info.attention_backend,"generation_defaults":o,"stream_resumption":false,"strict_tool_schemas":false,
             "cache":app.info.cache,"cache_budget_bytes":app.info.cache_budget_bytes,"inference_workers":1,"parallel":app.info.parallel,"batch_wait_us":app.info.batch_wait_us,
             "statistics":{"evaluated_tokens":"32 times refinement forwards, including repeated positions","processed_tokens":"all transformer input positions, including prefill and commit refreshes","timings":"prefill counts complete prompt blocks; predicted counts non-special completion tokens"}}
     }))

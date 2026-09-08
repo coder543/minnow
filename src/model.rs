@@ -275,9 +275,8 @@ impl Moe {
                 ExpertProjection::Quantized(b),
                 ExpertProjection::Quantized(down),
             ] = self.packed.as_slice()
-            && [a, b, down]
-                .iter()
-                .all(|w| w.encoding == crate::container::Encoding::Nvfp4)
+            && [a, b, down].iter().all(|w| w.encoding == a.encoding)
+            && (a.encoding == crate::container::Encoding::Nvfp4 || a.encoding.int8())
         {
             let plan = crate::cuda::route_mini_compact(
                 &logits,
@@ -287,13 +286,26 @@ impl Moe {
             if trace.is_some() {
                 record(trace, format!("{name}.router_ids"), &plan.expert_ids()?);
             }
-            let hidden = if fused {
+            let int8 = a.encoding.int8();
+            let hidden = if int8 && fused {
+                crate::cuda::quantized::routed_silu(x, a, b, &plan)?
+            } else if int8 {
+                silu_mul(
+                    &crate::cuda::quantized::routed(x, a, &plan)?,
+                    &crate::cuda::quantized::routed(x, b, &plan)?,
+                    fused,
+                )?
+            } else if fused {
                 crate::cuda::nvfp4::routed_silu(x, a, b, &plan)?
             } else {
                 let (gate, up) = crate::cuda::nvfp4::routed_pair(x, a, b, &plan)?;
                 silu_mul(&gate, &up, fused)?
             };
-            let experts = crate::cuda::nvfp4::routed(&hidden, down, &plan)?;
+            let experts = if int8 {
+                crate::cuda::quantized::routed(&hidden, down, &plan)?
+            } else {
+                crate::cuda::nvfp4::routed(&hidden, down, &plan)?
+            };
             let mut out = crate::cuda::mix_compact_experts(&experts, &plan)?;
             if let Some(shared) = &self.shared {
                 out = (out + shared.forward(x, fused)?)?;
@@ -427,11 +439,17 @@ impl Moe {
                 #[cfg(feature = "cuda")]
                 if fused
                     && x.device().is_cuda()
+                    && x.dtype() == DType::BF16
                     && let (ExpertProjection::Quantized(a), ExpertProjection::Quantized(b)) =
                         (&self.packed[0], &self.packed[1])
-                    && a.encoding == crate::container::Encoding::Nvfp4
+                    && (a.encoding == crate::container::Encoding::Nvfp4 || a.encoding.int8())
                     && b.encoding == a.encoding
                 {
+                    if a.encoding.int8() {
+                        return Ok(crate::cuda::quantized::grouped_silu_indexed(
+                            x, a, b, &segments, &token_ids,
+                        )?);
+                    }
                     return Ok(crate::cuda::nvfp4::grouped_silu_indexed(
                         x, a, b, &segments, &token_ids,
                     )?);
@@ -708,6 +726,10 @@ impl Model {
         device: &Device,
         reserve_mib: u64,
     ) -> Result<Self> {
+        ensure!(
+            !device.is_cpu() || dtype == DType::F32,
+            "CPU execution requires FP32 activations; use --dtype auto or --dtype f32 (quantized experts remain compressed)"
+        );
         let c = Config::load(path)?;
         let mut loader = crate::weights::WeightLoader::open(path)?;
         loader.set_memory_reserve_mib(reserve_mib)?;
@@ -879,6 +901,24 @@ impl Model {
     pub fn set_flash_attention(&mut self, enabled: bool) {
         self.flash_attention = enabled;
     }
+    /// Actual backend selection, shared by execution and diagnostics. All
+    /// supported mini/flash weight encodings use this path with BF16 activations.
+    pub fn uses_flash_attention(&self) -> bool {
+        cfg!(feature = "cuda")
+            && self.fused_attention
+            && self.device.is_cuda()
+            && self.dtype == DType::BF16
+            && self.config.head_dim == 128
+            && self.config.block_size == 32
+            && self.flash_attention
+    }
+    pub fn attention_backend(&self) -> &'static str {
+        if self.uses_flash_attention() {
+            "flash"
+        } else {
+            "materialized"
+        }
+    }
     pub fn set_fused_qkv(&mut self, enabled: bool) {
         self.fused_qkv = enabled;
     }
@@ -1015,13 +1055,7 @@ impl Model {
         let c = &self.config;
         let n = q.dim(1)?;
         #[cfg(feature = "cuda")]
-        if self.fused_attention
-            && self.device.is_cuda()
-            && self.dtype == DType::BF16
-            && c.head_dim == 128
-            && c.block_size == 32
-            && self.flash_attention
-        {
+        if self.uses_flash_attention() {
             return Ok(crate::cuda::flash::attention(
                 &q.contiguous()?,
                 keys,
@@ -1115,6 +1149,17 @@ impl Model {
     /// Evaluates aligned blocks at the committed offset, replacing uncommitted K/V.
     /// `logits=false` avoids the large vocabulary projection during prefill/commit.
     pub fn forward(
+        &self,
+        tokens: &[u32],
+        cache: &mut Cache,
+        logits: bool,
+        trace: Option<&mut Trace>,
+    ) -> Result<Option<Tensor>> {
+        self.device
+            .with_context(|| self.forward_inner(tokens, cache, logits, trace))
+    }
+
+    fn forward_inner(
         &self,
         tokens: &[u32],
         cache: &mut Cache,

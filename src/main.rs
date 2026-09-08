@@ -12,6 +12,7 @@ use std::{fs, path::PathBuf, time::Instant};
 
 #[derive(Clone, Copy, ValueEnum)]
 enum Precision {
+    Auto,
     Bf16,
     F32,
 }
@@ -21,9 +22,11 @@ struct Cli {
     /// Checkpoint directory or self-contained .mnw file (required).
     #[arg(long, global = true)]
     model: Option<PathBuf>,
-    #[arg(long, global = true, default_value = "cuda")]
+    /// auto selects CUDA when available, otherwise CPU. Also cpu, cuda, cuda:N.
+    #[arg(long, global = true, default_value = "auto")]
     device: String,
-    #[arg(long, global = true, value_enum, default_value = "bf16")]
+    /// auto uses BF16 on CUDA and FP32 on CPU.
+    #[arg(long, global = true, value_enum, default_value = "auto")]
     dtype: Precision,
     /// Use individual expert GEMMs for comparison with the batched CUDA path.
     #[arg(long, global = true)]
@@ -40,7 +43,7 @@ struct Cli {
     /// Use materialized attention instead of the default block FlashAttention.
     #[arg(long, global = true)]
     materialized_attention: bool,
-    /// Use host routing for numerical/performance comparisons (NVFP4 defaults to GPU).
+    /// Use host routing for comparisons (INT8/NVFP4 decode defaults to GPU).
     #[arg(long, global = true, conflicts_with = "device_routing")]
     host_routing: bool,
     /// Materialize expert gathering, FP32 weighting, and reduction intermediates.
@@ -200,11 +203,21 @@ fn device(name: &str) -> Result<Device> {
     if name == "cpu" {
         return Ok(Device::Cpu);
     }
+    if name == "auto" {
+        #[cfg(feature = "cuda")]
+        {
+            match Device::new_cuda(0) {
+                Ok(device) => return Ok(device),
+                Err(error) => tracing::info!(%error, "CUDA unavailable; selecting CPU"),
+            }
+        }
+        return Ok(Device::Cpu);
+    }
     let ordinal = if name == "cuda" {
         0
     } else {
         name.strip_prefix("cuda:")
-            .context("device must be cpu, cuda, or cuda:N")?
+            .context("device must be auto, cpu, cuda, or cuda:N")?
             .parse()?
     };
     Device::new_cuda(ordinal).context("initializing CUDA (build with --features cuda)")
@@ -314,9 +327,17 @@ async fn main() -> Result<()> {
     }
     let device = device(&cli.device)?;
     let dtype = match cli.dtype {
+        Precision::Auto => {
+            if device.is_cuda() {
+                DType::BF16
+            } else {
+                DType::F32
+            }
+        }
         Precision::Bf16 => DType::BF16,
         Precision::F32 => DType::F32,
     };
+    tracing::info!(?device, ?dtype, "execution backend");
     let start = Instant::now();
     let mut model =
         Model::load_with_memory_reserve(&model_path, dtype, &device, cli.memory_reserve_mib)?;
@@ -334,6 +355,7 @@ async fn main() -> Result<()> {
     model.set_prefill_chunk_tokens(cli.prefill_chunk_tokens)?;
     model.set_attention_chunk_tokens(cli.attention_chunk_tokens)?;
     device.synchronize()?;
+    tracing::info!(backend = model.attention_backend(), "attention backend");
     tracing::info!(seconds = start.elapsed().as_secs_f64(), "model loaded");
     match cli.command {
         Command::Generate {
@@ -576,7 +598,7 @@ async fn main() -> Result<()> {
                         }
                     }
                     let mean = times.iter().sum::<f64>() / times.len() as f64;
-                    let report = json!({"prompt_tokens":n,"iterations":iterations,"warmups":2,"seconds":times,"mean_seconds":mean,"tokens_per_second":n as f64 / mean,"max_chunk_tokens":chunk_size,"attention_chunk_tokens":model.attention_chunk_tokens(),"forwards":forwards,"batched_experts":!cli.serial_experts,"fused_attention":!cli.unfused_attention,"flash_attention":!cli.materialized_attention && !cli.unfused_attention,"fused_expert_mix":!cli.unfused_expert_mix,"dtype":format!("{dtype:?}")});
+                    let report = json!({"prompt_tokens":n,"iterations":iterations,"warmups":2,"seconds":times,"mean_seconds":mean,"tokens_per_second":n as f64 / mean,"max_chunk_tokens":chunk_size,"attention_chunk_tokens":model.attention_chunk_tokens(),"forwards":forwards,"batched_experts":!cli.serial_experts,"fused_attention":!cli.unfused_attention,"flash_attention":model.uses_flash_attention(),"fused_expert_mix":!cli.unfused_expert_mix,"dtype":format!("{dtype:?}")});
                     tracing::info!(%report,"prefill benchmark");
                     reports.push(report);
                 }
@@ -747,4 +769,17 @@ async fn main() -> Result<()> {
         _ => unreachable!(),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod backend_tests {
+    use super::*;
+    #[test]
+    fn cpu_and_invalid_device_selection() {
+        assert!(device("cpu").unwrap().is_cpu());
+        assert!(device("metal").is_err());
+        assert!(device("cuda:abc").is_err());
+        #[cfg(not(feature = "cuda"))]
+        assert!(device("auto").unwrap().is_cpu());
+    }
 }

@@ -10,10 +10,10 @@ the client with prefill progress, useful token rates, and refinement statistics.
 
 ## Requirements
 
-- Linux, Rust, and Git (for the pinned CUDA build dependency).
-- CUDA 13 or later (`nvcc` on PATH, or set `NVCC`).
-- An NVIDIA GPU with BF16 support (Ampere or newer). **NVFP4 requires SM120/121**
-  hardware, such as RTX Blackwell or GB10.
+- Linux and Rust. CPU builds require no CUDA installation.
+- For GPU acceleration: Git, CUDA 13 or later (`nvcc` on PATH, or set `NVCC`),
+  and an NVIDIA GPU with BF16 support (Ampere or newer).
+  **Native NVFP4 CUDA execution requires SM120/121**, such as RTX Blackwell or GB10.
 - A local model checkpoint on a filesystem supporting direct I/O (`O_DIRECT`).
 
 Only routed experts are quantized; attention, shared experts, embeddings, and the
@@ -40,9 +40,26 @@ target/release/minnow --model models/LLaDA2.2-mini serve --listen 127.0.0.1:8080
 The first CUDA build fetches pinned CUTLASS headers through CudaForge; subsequent
 builds reuse its cache. Third-party notices are in `vendor/flash-attention/`.
 
-Serving and checkpoint conversion do not require Python. A CPU build
-(`cargo build --release`) is available for small test fixtures and reference
-diagnostics.
+Serving and checkpoint conversion do not require Python. For a CPU-only build:
+
+```sh
+cargo build --release
+
+target/release/minnow --model models/mini-int8.mnw --device cpu serve
+```
+
+`--device auto` (the default) selects CUDA when available, otherwise CPU.
+`--dtype auto` uses BF16 on CUDA and FP32 on CPU. A CUDA build still requires
+its linked NVIDIA libraries to start; use the CPU build on systems without them.
+CPU execution supports floating, INT8, and NVFP4 checkpoints with the same API,
+caching, and streaming behavior, but is substantially slower than CUDA. Quantized
+experts stay compressed; the CPU expands one selected expert at a time for GEMM.
+Unquantized weights use FP32 on CPU, so budget twice their BF16 storage size,
+plus expert scratch, K/V, and activations. CPU and CUDA results can differ through
+floating-point rounding. Set `RAYON_NUM_THREADS` to limit CPU parallelism.
+
+Candle's Apple Metal backend is not yet integrated into minnow. AMD/Intel GPU
+acceleration is not supported by this build; those systems can use the CPU path.
 
 ## Quantization
 
@@ -70,13 +87,14 @@ are not evidence of equal answer quality. Convert from floating-point weights.
 Use `minnow --model models/mini-int8.mnw validate` to verify checkpoint
 checksums separately from loading. See [formats and conversion](docs/model-format.md).
 
-NVFP4 uses fused gate/up/SiLU kernels and GPU routing for 32-token decode
+INT8 and NVFP4 use fused gate/up/SiLU kernels and GPU routing for 32-token decode
 blocks by default. `--host-routing` and `--unfused-activation` provide comparison
 paths. Block FlashAttention improves long-prompt prefill by keeping attention scores
 on chip and is the default on supported CUDA shapes. `--materialized-attention`
 selects the previous attention path for numerical or performance comparisons.
 Floating-point rounding differs between the two and can change generated responses.
-See [optimization measurements](docs/nvfp4-optimizations.md).
+See [NVFP4 measurements](docs/nvfp4-optimizations.md) and
+[INT8 measurements and CPU fallback](docs/int8-optimizations.md).
 
 ## API and web UI
 
