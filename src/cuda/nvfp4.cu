@@ -88,13 +88,15 @@ __device__ __forceinline__ void nvfp4_mma(float* d,const unsigned* a,const unsig
     : "+f"(d[0]),"+f"(d[1]),"+f"(d[2]),"+f"(d[3])
     : "r"(a[0]),"r"(a[1]),"r"(a[2]),"r"(a[3]),"r"(b[0]),"r"(b[1]),"r"(sa),"r"(sb));
 }
-template<int Rows>
+template<int Rows, bool Pair=false>
 __device__ void nvfp4_gemm(const unsigned* x,const unsigned* xs,const float* xg,
     const unsigned* w,const unsigned* ws,const float* wg,const int* tiles,
     __nv_bfloat16* output,int input,int out,int indexed) {
-  const int lane=threadIdx.x%32,warp=threadIdx.x/32,g=lane/4,t=lane%4;
+  constexpr int Cols=2;
+  const int lane=threadIdx.x%32,warp=(threadIdx.x/32)%4,g=lane/4,t=lane%4;
   const int e=tiles[blockIdx.y*3],row=tiles[blockIdx.y*3+1],rows=tiles[blockIdx.y*3+2];
-  const int col=blockIdx.x*64+warp*16;
+  if(rows==0) return;
+  const int col=blockIdx.x*(Cols*32)+warp*(Cols*8);
   const int* indices=tiles+gridDim.y*3;
   int sources[Rows/16][2];
   #pragma unroll
@@ -105,17 +107,20 @@ __device__ void nvfp4_gemm(const unsigned* x,const unsigned* xs,const float* xg,
       sources[m][i]=r<rows && indexed ? indices[row+r] : row+r;
     }
   }
-  float acc[Rows/16][2][4]={};
-  for(int k=0;k<input/64;k++) {
-    unsigned bf[2][2],bs[2];
+  float acc[Rows/16][Cols][4]={};
+  auto load_weights = [&](int k, unsigned (&bf)[Cols][2], unsigned (&bs)[Cols]) {
     #pragma unroll
-    for(int n=0;n<2;n++) {
+    for(int n=0;n<Cols;n++) {
       const size_t tile=(size_t(e)*(out/8)+(col+n*8)/8)*(input/64)+k;
       if(col+n*8+g<out) {
         bf[n][0]=w[tile*64+lane]; bf[n][1]=w[tile*64+32+lane];
         bs[n]=ws[tile*8+g];
       } else { bf[n][0]=bf[n][1]=bs[n]=0; }
     }
+  };
+  unsigned bf[Cols][2],bs[Cols];
+  for(int k=0;k<input/64;k++) {
+    load_weights(k,bf,bs);
     #pragma unroll
     for(int m=0;m<Rows/16;m++) {
       if(m*16>=rows) continue;
@@ -130,7 +135,7 @@ __device__ void nvfp4_gemm(const unsigned* x,const unsigned* xs,const float* xg,
       const int source=sources[m][t%2];
       const unsigned scale=r<rows ? xs[size_t(source)*(input/64)+k] : 0;
       #pragma unroll
-      for(int n=0;n<2;n++) nvfp4_mma(acc[m][n],af,bf[n],scale,bs[n]);
+      for(int n=0;n<Cols;n++) nvfp4_mma(acc[m][n],af,bf[n],scale,bs[n]);
     }
   }
   #pragma unroll
@@ -142,9 +147,12 @@ __device__ void nvfp4_gemm(const unsigned* x,const unsigned* xs,const float* xg,
         const int source=sources[m][i/2];
         const float global=xg[source]*wg[e];
         #pragma unroll
-        for(int n=0;n<2;n++) {
+        for(int n=0;n<Cols;n++) {
           const int c=col+n*8+t*2+i%2;
-          if(c<out) output[size_t(row+r)*out+c]=__float2bfloat16_rn(acc[m][n][i]*global);
+          if(c<out) {
+            const size_t dest=Pair ? size_t(r)*(Cols*32)+c-blockIdx.x*(Cols*32) : size_t(row+r)*out+c;
+            output[dest]=__float2bfloat16_rn(acc[m][n][i]*global);
+          }
         }
       }
     }
@@ -156,9 +164,36 @@ extern "C" __global__ void minnow_nvfp4_gemm_##R(const unsigned char* packed, \
   const unsigned* x=reinterpret_cast<const unsigned*>(packed); \
   const unsigned* xs=reinterpret_cast<const unsigned*>(packed+size_t(rows)*input/2); \
   const float* xg=reinterpret_cast<const float*>(packed+size_t(rows)*input*9/16); \
-  nvfp4_gemm<R>(x,xs,xg,w,ws,wg,tiles,output,input,out,indexed); \
+  nvfp4_gemm<R,false>(x,xs,xg,w,ws,wg,tiles,output,input,out,indexed); \
 }
 NVFP4_GEMM(16)
 NVFP4_GEMM(32)
 NVFP4_GEMM(64)
 NVFP4_GEMM(128)
+
+#define NVFP4_PAIR(R) \
+extern "C" __global__ void minnow_nvfp4_pair_##R(const unsigned char* packed, \
+    const unsigned* w,const unsigned* ws,const float* wg,const int* tiles,__nv_bfloat16* output,int input,int out,int rows,int indexed, \
+    const unsigned* up,const unsigned* ups,const float* upg) { \
+  __shared__ __nv_bfloat16 temp[2*R*64]; \
+  const int count=tiles[blockIdx.y*3+2],start=tiles[blockIdx.y*3+1]; \
+  if(count==0) return; \
+  const int part=threadIdx.x/128; \
+  const unsigned* x=reinterpret_cast<const unsigned*>(packed); \
+  const unsigned* xs=reinterpret_cast<const unsigned*>(packed+size_t(rows)*input/2); \
+  const float* xg=reinterpret_cast<const float*>(packed+size_t(rows)*input*9/16); \
+  nvfp4_gemm<R,true>(x,xs,xg,part?up:w,part?ups:ws,part?upg:wg,tiles,temp+part*R*64,input,out,indexed); \
+  __syncthreads(); \
+  for(int i=threadIdx.x;i<count*64;i+=256) { \
+    const int col=blockIdx.x*64+i%64; \
+    if(col<out) { \
+      const float g=__bfloat162float(temp[i]); \
+      const __nv_bfloat16 activated=__float2bfloat16_rn(g/(1.f+expf(-g))); \
+      output[size_t(start+i/64)*out+col]=__hmul(activated,temp[R*64+i]); \
+    } \
+  } \
+}
+NVFP4_PAIR(16)
+NVFP4_PAIR(32)
+NVFP4_PAIR(64)
+NVFP4_PAIR(128)

@@ -23,6 +23,8 @@ def main():
     p.add_argument('--workspace-cache-mib', type=int, default=2048)
     p.add_argument('--prefill-only', action='store_true')
     p.add_argument('--decode-only', action='store_true')
+    p.add_argument('--server-arg', action='append', default=[],
+                   help='Additional minnow argument; repeat as --server-arg=--flag')
     args = p.parse_args()
     assert 1 <= args.iterations <= 20
     args.report.parent.mkdir(parents=True, exist_ok=True)
@@ -40,14 +42,15 @@ def main():
             raise RuntimeError(f'{path}: HTTP {error.code}: {error.read().decode()}') from error
 
     report = {'model': str(args.model), 'iterations': args.iterations, 'warmups': 1,
-              'workspace_cache_mib': args.workspace_cache_mib, 'prefill': [], 'decode': []}
+              'workspace_cache_mib': args.workspace_cache_mib, 'server_args': args.server_arg,
+              'prefill': [], 'decode': []}
 
     def save():
         args.report.write_text(json.dumps(report, indent=2)+'\n')
 
     with args.report.with_suffix('.server.log').open('w') as log:
         child = subprocess.Popen(['target/release/minnow', '--model', str(args.model),
-            '--workspace-cache-mib', str(args.workspace_cache_mib), 'serve',
+            '--workspace-cache-mib', str(args.workspace_cache_mib), *args.server_arg, 'serve',
             '--listen', f'127.0.0.1:{port}', '--parallel', '1'], stdout=log, stderr=subprocess.STDOUT)
         try:
             for _ in range(1800):

@@ -10,7 +10,7 @@ the client with prefill progress, useful token rates, and refinement statistics.
 
 ## Requirements
 
-- Linux and Rust.
+- Linux, Rust, and Git (for the pinned CUDA build dependency).
 - CUDA 13 or later (`nvcc` on PATH, or set `NVCC`).
 - An NVIDIA GPU with BF16 support (Ampere or newer). **NVFP4 requires SM120/121**
   hardware, such as RTX Blackwell or GB10.
@@ -36,6 +36,9 @@ target/release/minnow --model models/LLaDA2.2-mini \
 
 target/release/minnow --model models/LLaDA2.2-mini serve --listen 127.0.0.1:8080
 ```
+
+The first CUDA build fetches pinned CUTLASS headers through CudaForge; subsequent
+builds reuse its cache. Third-party notices are in `vendor/flash-attention/`.
 
 Python is not required for serving. A CPU build (`cargo build --release`) is
 available for small test fixtures and reference diagnostics.
@@ -64,6 +67,14 @@ into BF16 tensor-core registers. Both change model numerics; throughput results
 are not evidence of equal answer quality. Convert from floating-point weights.
 `--tensor-rules` permits mixed precision by layer or projection.
 See [formats and conversion](docs/model-format.md).
+
+NVFP4 uses fused gate/up/SiLU kernels and GPU routing for 32-token decode
+blocks by default. `--host-routing` and `--unfused-activation` provide comparison
+paths. Block FlashAttention improves long-prompt prefill by keeping attention scores
+on chip and is the default on supported CUDA shapes. `--materialized-attention`
+selects the previous attention path for numerical or performance comparisons.
+Floating-point rounding differs between the two and can change generated responses.
+See [optimization measurements](docs/nvfp4-optimizations.md).
 
 ## API and web UI
 
@@ -110,6 +121,7 @@ integrity, and CUDA kernels against independent numerical oracles.
 - [Validation and benchmarking](docs/validation.md)
 - [Measured quantization performance](docs/quantization-performance.md)
 
-Portable kernels target `compute_80` by default. `MINNOW_CUDA_ARCH` overrides that
-PTX target at build time; it does not change Candle or cuBLAS. NVFP4 builds as a
+Pointwise, normalization, and routing kernels target `compute_80` by default;
+`MINNOW_CUDA_ARCH` overrides their PTX target. Block FlashAttention uses
+`compute_80`; Candle and cuBLAS build separately. NVFP4 builds as a
 separate `compute_120f` module and always uses native Blackwell FP4 instructions.

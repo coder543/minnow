@@ -155,7 +155,9 @@ pub fn routed_expert_gemm(
     x.apply_op3_no_bwd(weights, &plan.0, &ExpertGemm { batched })
 }
 
-struct Mix;
+struct Mix {
+    compact: bool,
+}
 impl CustomOp2 for Mix {
     fn name(&self) -> &'static str {
         "minnow-device-expert-mix"
@@ -177,7 +179,7 @@ impl CustomOp2 for Mix {
         pl: &Layout,
     ) -> Result<(CudaStorage, Shape)> {
         let (batch, rows, hidden) = xl.shape().dims3()?;
-        if batch != 48
+        if batch != if self.compact { 8 } else { 48 }
             || rows != 32
             || hidden == 0
             || hidden > i32::MAX as usize
@@ -191,7 +193,7 @@ impl CustomOp2 for Mix {
         let dev = &x.device;
         let experts = x
             .as_cuda_slice::<bf16>()?
-            .slice(xl.start_offset()..xl.start_offset() + 48 * 32 * hidden);
+            .slice(xl.start_offset()..xl.start_offset() + batch * 32 * hidden);
         let plan = p
             .as_cuda_slice::<f32>()?
             .slice(pl.start_offset()..pl.start_offset() + PLAN_SIZE);
@@ -217,7 +219,19 @@ pub fn mix_routed_experts(experts: &Tensor, plan: &RoutingPlan) -> Result<Tensor
     if !experts.device().same_device(plan.0.device()) {
         candle_core::bail!("expert mix inputs must share a device");
     }
-    experts.apply_op2_no_bwd(&plan.0, &Mix)
+    experts.apply_op2_no_bwd(&plan.0, &Mix { compact: false })
+}
+pub fn mix_compact_experts(
+    experts: &Tensor,
+    plan: &super::routing::CompactRoutingPlan,
+) -> Result<Tensor> {
+    let (rows, hidden) = experts.dims2()?;
+    if rows != 256 || !experts.device().same_device(plan.mix.0.device()) {
+        candle_core::bail!("invalid compact expert outputs");
+    }
+    experts
+        .reshape((8, 32, hidden))?
+        .apply_op2_no_bwd(&plan.mix.0, &Mix { compact: true })
 }
 
 #[cfg(test)]

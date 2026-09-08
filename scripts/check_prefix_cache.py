@@ -2,7 +2,8 @@
 """Validate real multi-slot K/V reuse, forks, growth, LRU, and SSE cache accounting.
 
 Run sequentially under memory_guard.py against a server with at least four cache
-slots and the default similarity threshold. No checkpoint is loaded by this script.
+slots, at least as many execution slots, and the default similarity threshold.
+No checkpoint is loaded by this script.
 """
 import argparse
 import json
@@ -25,6 +26,8 @@ def main():
     props = request('/props')
     assert props['minnow']['cache']['cache_slots'] >= 4
     assert props['minnow']['inference_workers'] == 1
+    assert props['minnow']['parallel'] >= props['minnow']['cache']['cache_slots'], (
+        'Use --parallel >= --cache-slots so /slots exposes every idle cache capacity')
 
     def complete(label, prompt, stream=False, cache=True):
         body = {'prompt': prompt, 'max_tokens': 1, 'cache_prompt': cache,

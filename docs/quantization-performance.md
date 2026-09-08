@@ -14,7 +14,8 @@ BF16/INT8 baselines are retained from the preceding build; NVFP4 uses the new
 kernels. [Measurement data](quantization-performance.json) records checkpoint
 identities, settings, repetitions, work counts, and memory observations.
 The [Nsight profile](nvfp4-profile.md) separates attention, native expert GEMMs,
-weight traffic, and dispatch costs, with priorities for further optimization.
+weight traffic, and dispatch costs, with priorities for further optimization. The [follow-up measurements](nvfp4-optimizations.md)
+cover the newer routing, gate/up fusion, and default block FlashAttention.
 
 ## Cold prefill
 

@@ -37,6 +37,12 @@ struct Cli {
     /// Materialize attention scaling, masking, and FP32 softmax intermediates.
     #[arg(long, global = true)]
     unfused_attention: bool,
+    /// Use materialized attention instead of the default block FlashAttention.
+    #[arg(long, global = true)]
+    materialized_attention: bool,
+    /// Use host routing for numerical/performance comparisons (NVFP4 defaults to GPU).
+    #[arg(long, global = true, conflicts_with = "device_routing")]
+    host_routing: bool,
     /// Materialize expert gathering, FP32 weighting, and reduction intermediates.
     #[arg(long, global = true)]
     unfused_expert_mix: bool,
@@ -303,6 +309,8 @@ async fn main() -> Result<()> {
     model.set_compact_decode_experts(cli.compact_decode_experts);
     model.set_fused_activation(!cli.unfused_activation);
     model.set_fused_attention(!cli.unfused_attention);
+    model.set_flash_attention(!cli.materialized_attention);
+    model.set_host_routing(cli.host_routing);
     model.set_fused_expert_mix(!cli.unfused_expert_mix);
     model.set_fused_norm(!cli.unfused_norm);
     model.set_device_routing(cli.device_routing);
@@ -550,7 +558,7 @@ async fn main() -> Result<()> {
                         }
                     }
                     let mean = times.iter().sum::<f64>() / times.len() as f64;
-                    let report = json!({"prompt_tokens":n,"iterations":iterations,"warmups":2,"seconds":times,"mean_seconds":mean,"tokens_per_second":n as f64 / mean,"max_chunk_tokens":chunk_size,"attention_chunk_tokens":model.attention_chunk_tokens(),"forwards":forwards,"batched_experts":!cli.serial_experts,"fused_attention":!cli.unfused_attention,"fused_expert_mix":!cli.unfused_expert_mix,"dtype":format!("{dtype:?}")});
+                    let report = json!({"prompt_tokens":n,"iterations":iterations,"warmups":2,"seconds":times,"mean_seconds":mean,"tokens_per_second":n as f64 / mean,"max_chunk_tokens":chunk_size,"attention_chunk_tokens":model.attention_chunk_tokens(),"forwards":forwards,"batched_experts":!cli.serial_experts,"fused_attention":!cli.unfused_attention,"flash_attention":!cli.materialized_attention && !cli.unfused_attention,"fused_expert_mix":!cli.unfused_expert_mix,"dtype":format!("{dtype:?}")});
                     tracing::info!(%report,"prefill benchmark");
                     reports.push(report);
                 }

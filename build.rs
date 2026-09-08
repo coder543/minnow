@@ -38,4 +38,25 @@ fn main() {
         .status()
         .expect("nvcc is required");
     assert!(status.success(), "compiling native NVFP4 kernels failed");
+    println!("cargo:rerun-if-changed=vendor/flash-attention");
+    let includes = cudaforge::DependencyManager::new()
+        .with_cutlass(Some("7d49e6c7e2f8896c47f586706e67e1fb215529dc"))
+        .fetch_all(&output)
+        .expect("fetching pinned CUTLASS headers");
+    let status = Command::new(env::var_os("NVCC").unwrap_or_else(|| "nvcc".into()))
+        .args([
+            "-ptx",
+            "-arch=compute_80",
+            "-O3",
+            "-std=c++17",
+            "--expt-relaxed-constexpr",
+            "--expt-extended-lambda",
+            "-Ivendor/flash-attention",
+        ])
+        .args(includes)
+        .args(["src/cuda/flash.cu", "-o"])
+        .arg(output.join("minnow-flash.ptx"))
+        .status()
+        .expect("nvcc is required");
+    assert!(status.success(), "compiling block FlashAttention failed");
 }

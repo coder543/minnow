@@ -1,8 +1,36 @@
+// Two 16-row tiles per possible active expert, then 256 source indices and a
+// in-place mixing plan. Integer descriptors occupy raw bits of FP32 storage.
+__device__ void compact_route(const float* plan, float* output) {
+  const int tid=threadIdx.x;
+  int* descriptors=reinterpret_cast<int*>(output);
+  const int id=(int)plan[49+tid];
+  int row=0;
+  for(int j=0;j<256;j++) {
+    const int other=(int)plan[49+j];
+    row += other<id || (other==id && j<tid);
+  }
+  descriptors[288+row]=tid/8;
+  output[544+305+tid]=(float)row;
+  if(tid<96) {
+    const int rank=tid/2, part=tid%2;
+    const int expert=rank<(int)plan[0] ? (int)plan[1+rank] : 256;
+    int start=0,count=0;
+    for(int j=0;j<256;j++) {
+      const int other=(int)plan[49+j];
+      start+=other<expert;
+      count+=other==expert;
+    }
+    descriptors[tid*3]=expert==256?0:expert;
+    descriptors[tid*3+1]=start+part*16;
+    descriptors[tid*3+2]=max(0,min(16,count-part*16));
+  }
+}
+
 // The mini decode route is one 32-token block: 256 experts, block capacity 48,
 // top eight per token. All choices and mixing weights remain on the GPU.
 // Plan: count, 48 sorted active expert IDs, 256 token expert IDs,
 //       256 gathered row indices, 256 FP32 mixing weights.
-extern "C" __global__ void minnow_route_mini(
+__device__ void route_mini(
     const float* logits, const float* bias, float* plan, float scale) {
   __shared__ float scores[32 * 256];
   __shared__ float maxima[256];
@@ -124,4 +152,15 @@ extern "C" __global__ void minnow_mix_routed(const __nv_bfloat16* experts,
     for (int slot = 0; slot < step; ++slot) v[slot] += v[slot + step];
   }
   output[i] = __float2bfloat16_rn(v[0]);
+}
+
+
+extern "C" __global__ void minnow_route_mini(const float* logits,const float* bias,float* plan,float scale) {
+  route_mini(logits,bias,plan,scale);
+}
+extern "C" __global__ void minnow_route_mini_compact(const float* logits,const float* bias,float* output,float scale) {
+  float* plan=output+544;
+  route_mini(logits,bias,plan,scale);
+  __syncthreads();
+  compact_route(plan,output);
 }

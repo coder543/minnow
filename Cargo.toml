@@ -37,6 +37,9 @@ rayon = "1"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 
+[build-dependencies]
+cudaforge = "0.1.6"
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

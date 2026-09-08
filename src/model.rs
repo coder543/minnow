@@ -111,6 +111,7 @@ struct MoeExecution {
     fused_activation: bool,
     fused_mix: bool,
     device_routing: bool,
+    host_routing: bool,
 }
 
 fn mix_experts(
@@ -258,7 +259,50 @@ impl Moe {
         let logits = self.gate.forward(&x.to_dtype(DType::F32)?)?;
         record(trace, format!("{name}.router_logits"), &logits);
         #[cfg(feature = "cuda")]
+        if quantized
+            && !execution.host_routing
+            && execution.batched_experts
+            && execution.fused_mix
+            && x.device().is_cuda()
+            && x.dtype() == DType::BF16
+            && x.dim(0)? == 32
+            && c.block_size == 32
+            && c.num_experts == 256
+            && c.num_experts_per_tok == 8
+            && c.expert_capacity == 48
+            && let [
+                ExpertProjection::Quantized(a),
+                ExpertProjection::Quantized(b),
+                ExpertProjection::Quantized(down),
+            ] = self.packed.as_slice()
+            && [a, b, down]
+                .iter()
+                .all(|w| w.encoding == crate::container::Encoding::Nvfp4)
+        {
+            let plan = crate::cuda::route_mini_compact(
+                &logits,
+                &self.device_bias,
+                c.routed_scaling_factor as f32,
+            )?;
+            if trace.is_some() {
+                record(trace, format!("{name}.router_ids"), &plan.expert_ids()?);
+            }
+            let hidden = if fused {
+                crate::cuda::nvfp4::routed_silu(x, a, b, &plan)?
+            } else {
+                let (gate, up) = crate::cuda::nvfp4::routed_pair(x, a, b, &plan)?;
+                silu_mul(&gate, &up, fused)?
+            };
+            let experts = crate::cuda::nvfp4::routed(&hidden, down, &plan)?;
+            let mut out = crate::cuda::mix_compact_experts(&experts, &plan)?;
+            if let Some(shared) = &self.shared {
+                out = (out + shared.forward(x, fused)?)?;
+            }
+            return Ok(out);
+        }
+        #[cfg(feature = "cuda")]
         if execution.device_routing
+            && !execution.host_routing
             && !quantized
             && execution.batched_experts
             && execution.fused_mix
@@ -379,8 +423,23 @@ impl Moe {
                     self.packed[1].grouped(&selected, &segments)?,
                 ))
             };
-            let (gate, up) = evaluate_pair()?;
-            let hidden = silu_mul(&gate, &up, fused)?;
+            let evaluate_hidden = || -> Result<Tensor> {
+                #[cfg(feature = "cuda")]
+                if fused
+                    && x.device().is_cuda()
+                    && let (ExpertProjection::Quantized(a), ExpertProjection::Quantized(b)) =
+                        (&self.packed[0], &self.packed[1])
+                    && a.encoding == crate::container::Encoding::Nvfp4
+                    && b.encoding == a.encoding
+                {
+                    return Ok(crate::cuda::nvfp4::grouped_silu_indexed(
+                        x, a, b, &segments, &token_ids,
+                    )?);
+                }
+                let (gate, up) = evaluate_pair()?;
+                silu_mul(&gate, &up, fused)
+            };
+            let hidden = evaluate_hidden()?;
             let output = self.packed[2].grouped(&hidden, &segments)?;
             let mut output = mix_experts(
                 &output,
@@ -613,6 +672,7 @@ pub struct Model {
     dtype: DType,
     moe_execution: MoeExecution,
     fused_attention: bool,
+    flash_attention: bool,
     fused_qkv: bool,
     prefill_chunk_tokens: usize,
     attention_chunk_tokens: usize,
@@ -729,8 +789,10 @@ impl Model {
                 fused_activation: true,
                 fused_mix: true,
                 device_routing: false,
+                host_routing: false,
             },
             fused_attention: true,
+            flash_attention: true,
             fused_qkv: true,
             prefill_chunk_tokens: 4096,
             attention_chunk_tokens: 1024,
@@ -781,6 +843,9 @@ impl Model {
     pub fn set_device_routing(&mut self, enabled: bool) {
         self.moe_execution.device_routing = enabled;
     }
+    pub fn set_host_routing(&mut self, enabled: bool) {
+        self.moe_execution.host_routing = enabled;
+    }
     pub fn set_fused_norm(&mut self, enabled: bool) {
         self.norm.fused = enabled;
         for layer in &mut self.layers {
@@ -796,6 +861,9 @@ impl Model {
     }
     pub fn set_fused_attention(&mut self, enabled: bool) {
         self.fused_attention = enabled;
+    }
+    pub fn set_flash_attention(&mut self, enabled: bool) {
+        self.flash_attention = enabled;
     }
     pub fn set_fused_qkv(&mut self, enabled: bool) {
         self.fused_qkv = enabled;
@@ -932,6 +1000,21 @@ impl Model {
     ) -> Result<Tensor> {
         let c = &self.config;
         let n = q.dim(1)?;
+        #[cfg(feature = "cuda")]
+        if self.fused_attention
+            && self.device.is_cuda()
+            && self.dtype == DType::BF16
+            && c.head_dim == 128
+            && c.block_size == 32
+            && self.flash_attention
+        {
+            return Ok(crate::cuda::flash::attention(
+                &q.contiguous()?,
+                keys,
+                values,
+                offset,
+            )?);
+        }
         let groups = c.num_attention_heads / c.num_key_value_heads;
         let budget = MAX_ATTENTION_ELEMENTS / c.num_attention_heads / (offset + n);
         let chunk = n
@@ -1063,6 +1146,11 @@ impl Model {
                 c.head_dim,
             ))?;
             let (q, k, v) = self.prepare_qkv(layer, &qkv, &cos, &sin)?;
+            if trace.is_some() {
+                record(&mut trace, format!("layers.{i}.query"), &q.transpose(0, 1)?);
+                record(&mut trace, format!("layers.{i}.key"), &k.transpose(0, 1)?);
+                record(&mut trace, format!("layers.{i}.value"), &v.transpose(0, 1)?);
+            }
             if cache.layers[i].is_none() {
                 let shape = (c.num_key_value_heads, cache.capacity, c.head_dim);
                 cache.layers[i] = Some((
@@ -1074,6 +1162,7 @@ impl Model {
             keys.slice_set(&k, 1, cache.len)?;
             values.slice_set(&v, 1, cache.len)?;
             let h = self.attention(&q, keys, values, offset)?;
+            record(&mut trace, format!("layers.{i}.attention_output"), &h);
             x = (x + layer.out.forward(&h)?)?;
             record(&mut trace, format!("layers.{i}.attention"), &x);
             let h = layer.post_norm.forward(&x)?;

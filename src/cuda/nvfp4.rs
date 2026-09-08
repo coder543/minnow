@@ -79,6 +79,8 @@ struct Gemm<'a> {
     source_rows: usize,
     indices: Option<&'a [u32]>,
     tile: usize,
+    pair: Option<&'a Weights>,
+    device_plan: Option<&'a super::CompactRoutingPlan>,
 }
 impl CustomOp3 for Gemm<'_> {
     fn name(&self) -> &'static str {
@@ -131,11 +133,17 @@ impl CustomOp3 for Gemm<'_> {
             || wl.shape().elem_count() != experts * out * input / 2
             || sl.shape().elem_count() != experts * out * input / 16
             || self.segments.iter().any(|&(e, n)| e >= experts || n == 0)
-            || self
-                .segments
-                .iter()
-                .try_fold(0usize, |sum, (_, n)| sum.checked_add(*n))
-                != Some(rows)
+            || (self.device_plan.is_none()
+                && self
+                    .segments
+                    .iter()
+                    .try_fold(0usize, |sum, (_, n)| sum.checked_add(*n))
+                    != Some(rows))
+            || (self.device_plan.is_some()
+                && (rows != 256
+                    || experts != 256
+                    || self.tile != 16
+                    || ![32, 256].contains(&source_rows)))
         {
             candle_core::bail!("invalid NVFP4 weights, shape, layout or expert segments");
         }
@@ -154,6 +162,44 @@ impl CustomOp3 for Gemm<'_> {
         };
         let dev = &x.device;
         let stream = dev.cuda_stream();
+        if let Some(b) = self.pair
+            && (b.shape != self.w.shape
+                || b.encoding != Encoding::Nvfp4
+                || b.group_size != 16
+                || b.codes.elem_count() != wl.shape().elem_count()
+                || b.scales.elem_count() != sl.shape().elem_count()
+                || ![&b.codes, &b.scales]
+                    .iter()
+                    .all(|t| t.is_contiguous() && t.layout().start_offset().is_multiple_of(4))
+                || b.global_scales
+                    .as_ref()
+                    .is_none_or(|g| g.dims() != [experts] || !g.is_contiguous()))
+        {
+            candle_core::bail!("invalid NVFP4 paired weights");
+        }
+        let paired_storage = self.pair.map(|b| {
+            (
+                b.codes.storage_and_layout(),
+                b.scales.storage_and_layout(),
+                b.global_scales.as_ref().unwrap().storage_and_layout(),
+            )
+        });
+        let paired_views = if let Some(((bc, cl), (bs, sl), (bg, gl))) = &paired_storage {
+            let (Storage::Cuda(bc), Storage::Cuda(bs), Storage::Cuda(bg)) = (&**bc, &**bs, &**bg)
+            else {
+                candle_core::bail!("paired weights must be on CUDA");
+            };
+            Some((
+                bc.as_cuda_slice::<u8>()?
+                    .slice(cl.start_offset()..cl.start_offset() + cl.shape().elem_count()),
+                bs.as_cuda_slice::<u8>()?
+                    .slice(sl.start_offset()..sl.start_offset() + sl.shape().elem_count()),
+                bg.as_cuda_slice::<f32>()?
+                    .slice(gl.start_offset()..gl.start_offset() + experts),
+            ))
+        } else {
+            None
+        };
         let xs = x
             .as_cuda_slice::<u8>()?
             .slice(xl.start_offset()..xl.start_offset() + xl.shape().elem_count());
@@ -182,32 +228,60 @@ impl CustomOp3 for Gemm<'_> {
         if let Some(indices) = self.indices {
             descriptors.extend(indices.iter().map(|&i| i as i32));
         }
-        let descriptors = stream.clone_htod(&descriptors).w()?;
+        let host_descriptors = if self.device_plan.is_none() {
+            Some(stream.clone_htod(&descriptors).w()?)
+        } else {
+            None
+        };
+        let plan_storage = self.device_plan.map(|p| p.descriptors.storage_and_layout());
+        let device_descriptors = if let Some((storage, layout)) = &plan_storage {
+            let Storage::Cuda(storage) = &**storage else {
+                candle_core::bail!("plan must be on CUDA");
+            };
+            Some(
+                storage
+                    .as_cuda_slice::<f32>()?
+                    .slice(layout.start_offset()..layout.start_offset() + 544),
+            )
+        } else {
+            None
+        };
+        let tiles = if self.device_plan.is_some() {
+            96
+        } else {
+            tiles
+        };
         // SAFETY: disjoint descriptors cover all rows; kernel bounds output columns.
         let mut output = unsafe { dev.alloc::<bf16>(rows * out)? };
         let f = dev.get_or_load_custom_func(
-            &format!("minnow_nvfp4_gemm_{}", self.tile),
+            &format!(
+                "minnow_nvfp4_{}_{}",
+                if self.pair.is_some() { "pair" } else { "gemm" },
+                self.tile
+            ),
             "minnow-nvfp4-v1",
             PTX,
         )?;
         let (k, n, m) = (input as i32, out as i32, source_rows as i32);
-        let indexed = i32::from(self.indices.is_some());
+        let indexed =
+            i32::from(self.indices.is_some() || (self.device_plan.is_some() && source_rows == 32));
         let mut call = f.builder();
-        call.arg(&xs)
-            .arg(&ws)
-            .arg(&ss)
-            .arg(&gs)
-            .arg(&descriptors)
-            .arg(&mut output)
-            .arg(&k)
-            .arg(&n)
-            .arg(&m)
-            .arg(&indexed);
+        call.arg(&xs).arg(&ws).arg(&ss).arg(&gs);
+        // Device descriptors store integer bits in a private FP32 allocation.
+        if let Some(p) = &device_descriptors {
+            call.arg(p);
+        } else {
+            call.arg(host_descriptors.as_ref().unwrap());
+        }
+        call.arg(&mut output).arg(&k).arg(&n).arg(&m).arg(&indexed);
+        if let Some((bc, bs, bg)) = &paired_views {
+            call.arg(bc).arg(bs).arg(bg);
+        }
         // SAFETY: validated buffers, alignment, descriptor indices, and N8/K64 shapes.
         unsafe {
             call.launch(LaunchConfig {
                 grid_dim: (out.div_ceil(64) as u32, tiles as u32, 1),
-                block_dim: (128, 1, 1),
+                block_dim: (if self.pair.is_some() { 256 } else { 128 }, 1, 1),
                 shared_mem_bytes: 0,
             })
         }
@@ -224,6 +298,7 @@ fn run(
     w: &Weights,
     segments: &[(usize, usize)],
     indices: Option<&[u32]>,
+    pair: Option<&Weights>,
 ) -> Result<Tensor> {
     let rows = indices.map_or(source_rows, |v| v.len());
     for t in [
@@ -233,6 +308,17 @@ fn run(
     ] {
         if !a.device().same_device(t.device()) {
             candle_core::bail!("NVFP4 buffers must share a device");
+        }
+    }
+    if let Some(b) = pair {
+        for t in [
+            &b.codes,
+            &b.scales,
+            b.global_scales.as_ref().unwrap_or(&b.scales),
+        ] {
+            if !a.device().same_device(t.device()) {
+                candle_core::bail!("paired weights must share a device");
+            }
         }
     }
     let tile = std::env::var("MINNOW_NVFP4_TILE_ROWS")
@@ -254,13 +340,15 @@ fn run(
             source_rows,
             indices,
             tile,
+            pair,
+            device_plan: None,
         },
     )
 }
 pub fn grouped(x: &Tensor, w: &Weights, segments: &[(usize, usize)]) -> Result<Tensor> {
     check_device(x.device())?;
     let a = x.apply_op1_no_bwd(&Quantize)?;
-    run(&a, x.dim(0)?, w, segments, None)
+    run(&a, x.dim(0)?, w, segments, None, None)
 }
 pub fn grouped_pair_indexed(
     x: &Tensor,
@@ -275,15 +363,209 @@ pub fn grouped_pair_indexed(
     }
     let q = x.apply_op1_no_bwd(&Quantize)?;
     Ok((
-        run(&q, x.dim(0)?, a, segments, Some(indices))?,
-        run(&q, x.dim(0)?, b, segments, Some(indices))?,
+        run(&q, x.dim(0)?, a, segments, Some(indices), None)?,
+        run(&q, x.dim(0)?, b, segments, Some(indices), None)?,
     ))
+}
+
+pub fn routed(x: &Tensor, w: &Weights, plan: &super::CompactRoutingPlan) -> Result<Tensor> {
+    let q = x.apply_op1_no_bwd(&Quantize)?;
+    routed_quantized(&q, x.dim(0)?, w, plan, None)
+}
+fn routed_quantized(
+    q: &Tensor,
+    source_rows: usize,
+    w: &Weights,
+    plan: &super::CompactRoutingPlan,
+    pair: Option<&Weights>,
+) -> Result<Tensor> {
+    for t in [
+        &w.codes,
+        &w.scales,
+        w.global_scales.as_ref().unwrap_or(&w.scales),
+        &plan.descriptors,
+    ] {
+        if !q.device().same_device(t.device()) {
+            candle_core::bail!("NVFP4 buffers must share a device");
+        }
+    }
+    if let Some(b) = pair {
+        for t in [
+            &b.codes,
+            &b.scales,
+            b.global_scales.as_ref().unwrap_or(&b.scales),
+        ] {
+            if !q.device().same_device(t.device()) {
+                candle_core::bail!("paired weights must share a device");
+            }
+        }
+    }
+    q.apply_op3_no_bwd(
+        &w.codes,
+        &w.scales,
+        &Gemm {
+            w,
+            segments: &[],
+            rows: 256,
+            source_rows,
+            indices: None,
+            tile: 16,
+            pair,
+            device_plan: Some(plan),
+        },
+    )
+}
+pub fn routed_pair(
+    x: &Tensor,
+    a: &Weights,
+    b: &Weights,
+    plan: &super::CompactRoutingPlan,
+) -> Result<(Tensor, Tensor)> {
+    if x.dim(0)? != 32 || a.shape != b.shape {
+        candle_core::bail!("invalid routed pair");
+    }
+    let q = x.apply_op1_no_bwd(&Quantize)?;
+    Ok((
+        routed_quantized(&q, 32, a, plan, None)?,
+        routed_quantized(&q, 32, b, plan, None)?,
+    ))
+}
+pub fn routed_silu(
+    x: &Tensor,
+    a: &Weights,
+    b: &Weights,
+    plan: &super::CompactRoutingPlan,
+) -> Result<Tensor> {
+    if x.dim(0)? != 32 {
+        candle_core::bail!("invalid routed input");
+    }
+    let q = x.apply_op1_no_bwd(&Quantize)?;
+    routed_quantized(&q, 32, a, plan, Some(b))
+}
+pub fn grouped_silu_indexed(
+    x: &Tensor,
+    a: &Weights,
+    b: &Weights,
+    segments: &[(usize, usize)],
+    indices: &[u32],
+) -> Result<Tensor> {
+    let q = x.apply_op1_no_bwd(&Quantize)?;
+    run(&q, x.dim(0)?, a, segments, Some(indices), Some(b))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::quant::nvfp4 as reference;
+    #[test]
+    #[ignore = "requires SM120/121"]
+    fn compact_device_route_matches_host_projections_and_mix() -> anyhow::Result<()> {
+        let dev = Device::new_cuda(0)?;
+        let make_weights = |out, input, salt| -> anyhow::Result<Weights> {
+            let mut codes = Vec::new();
+            let mut scales = Vec::new();
+            let mut globals = Vec::new();
+            for e in 0..256 {
+                let v: Vec<_> = (0..out * input)
+                    .map(|i| ((i * 17 + e * 31 + salt) % 257) as f32 / 257. - 0.5)
+                    .collect();
+                let (c, s, g) = reference::encode(&v)?;
+                let (c, s) = reference::pack(&c, &s, input, false)?;
+                codes.extend(c);
+                scales.extend(s);
+                globals.push(g);
+            }
+            Ok(Weights {
+                codes: Tensor::from_vec(codes, 256 * out * input / 2, &dev)?,
+                scales: Tensor::from_vec(scales, 256 * out * input / 16, &dev)?,
+                global_scales: Some(Tensor::from_vec(globals, 256, &dev)?),
+                encoding: Encoding::Nvfp4,
+                group_size: 16,
+                shape: (256, out, input),
+            })
+        };
+        let w = make_weights(128, 192, 0)?;
+        let up_weights = make_weights(128, 192, 79)?;
+        let down = make_weights(192, 128, 17)?;
+        let x = Tensor::from_vec(
+            (0..32 * 192)
+                .map(|i| ((i * 13 % 101) as f32 - 50.) / 59.)
+                .collect::<Vec<_>>(),
+            (32, 192),
+            &dev,
+        )?
+        .to_dtype(DType::BF16)?;
+        for tied in [true, false] {
+            let logits = Tensor::from_vec(
+                (0..8192)
+                    .map(|i| {
+                        if tied {
+                            0.
+                        } else {
+                            (i as f32 * 0.019).sin() * 11.
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+                (32, 256),
+                &dev,
+            )?;
+            let route =
+                super::super::route_mini(&logits, &Tensor::zeros(256, DType::F32, &dev)?, 2.5)?;
+            let ids = route.expert_ids()?.flatten_all()?.to_vec1::<u32>()?;
+            let plan = super::super::route_mini_compact(
+                &logits,
+                &Tensor::zeros(256, DType::F32, &dev)?,
+                2.5,
+            )?;
+            assert_eq!(plan.expert_ids()?.flatten_all()?.to_vec1::<u32>()?, ids);
+            let mut segments = Vec::new();
+            let mut indices = Vec::new();
+            let mut inverse = vec![0u32; 256];
+            for e in 0..256 {
+                let n = ids.iter().filter(|&&id| id == e).count();
+                if n == 0 {
+                    continue;
+                }
+                segments.push((e as usize, n));
+                for (slot, &id) in ids.iter().enumerate() {
+                    if id == e {
+                        inverse[slot] = indices.len() as u32;
+                        indices.push((slot / 8) as u32);
+                    }
+                }
+            }
+            let (expected, expected_up) =
+                grouped_pair_indexed(&x, &w, &up_weights, &segments, &indices)?;
+            let (actual, up) = routed_pair(&x, &w, &up_weights, &plan)?;
+            assert_eq!(actual.to_vec2::<bf16>()?, expected.to_vec2::<bf16>()?);
+            assert_eq!(up.to_vec2::<bf16>()?, expected_up.to_vec2::<bf16>()?);
+            let expected_hidden = super::super::silu_mul(&expected, &expected_up)?;
+            assert_eq!(
+                routed_silu(&x, &w, &up_weights, &plan)?.to_vec2::<bf16>()?,
+                expected_hidden.to_vec2::<bf16>()?
+            );
+            assert_eq!(
+                grouped_silu_indexed(&x, &w, &up_weights, &segments, &indices)?
+                    .to_vec2::<bf16>()?,
+                expected_hidden.to_vec2::<bf16>()?
+            );
+            let expected_down = grouped(&expected, &down, &segments)?;
+            let actual_down = routed(&actual, &down, &plan)?;
+            assert_eq!(
+                actual_down.to_vec2::<bf16>()?,
+                expected_down.to_vec2::<bf16>()?
+            );
+            let weights = route.0.narrow(0, 561, 256)?;
+            let expected_mix =
+                super::super::mix_experts(&expected_down, &inverse, &weights.to_vec1::<f32>()?, 8)?;
+            let actual_mix = super::super::mix_compact_experts(&actual_down, &plan)?;
+            assert_eq!(
+                actual_mix.to_vec2::<bf16>()?,
+                expected_mix.to_vec2::<bf16>()?
+            );
+        }
+        Ok(())
+    }
     #[test]
     #[ignore = "requires SM120/121"]
     fn native_mma_matches_independent_nvfp4_operands() -> anyhow::Result<()> {
@@ -363,21 +645,25 @@ mod tests {
             assert_eq!(up.to_vec2::<bf16>()?, expected);
             assert!(grouped_pair_indexed(&x, &w, &w, &segments, &vec![rows as u32; rows]).is_err());
             for tile in [16, 32, 64, 128] {
-                let actual = quantized
-                    .apply_op3_no_bwd(
-                        &w.codes,
-                        &w.scales,
-                        &Gemm {
-                            w: &w,
-                            segments: &segments,
-                            rows,
-                            source_rows: rows,
-                            indices: None,
-                            tile,
-                        },
-                    )?
-                    .to_dtype(DType::F32)?
-                    .to_vec2::<f32>()?;
+                let mut op = Gemm {
+                    w: &w,
+                    segments: &segments,
+                    rows,
+                    source_rows: rows,
+                    indices: None,
+                    tile,
+                    pair: None,
+                    device_plan: None,
+                };
+                let base = quantized.apply_op3_no_bwd(&w.codes, &w.scales, &op)?;
+                op.pair = Some(&w);
+                let fused = quantized.apply_op3_no_bwd(&w.codes, &w.scales, &op)?;
+                assert_eq!(
+                    fused.to_vec2::<bf16>()?,
+                    super::super::silu_mul(&base, &base)?.to_vec2::<bf16>()?,
+                    "fused tile{tile} input{input}"
+                );
+                let actual = base.to_dtype(DType::F32)?.to_vec2::<f32>()?;
                 let mut row = 0;
                 for (e, n) in segments {
                     let expected = decoded

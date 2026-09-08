@@ -7,6 +7,7 @@ use candle_core::{CpuStorage, CudaStorage, CustomOp2, Layout, Result, Shape, Ten
 pub(super) const PLAN_SIZE: usize = 817;
 struct Route {
     scale: f32,
+    compact: bool,
 }
 impl CustomOp2 for Route {
     fn name(&self) -> &'static str {
@@ -45,9 +46,14 @@ impl CustomOp2 for Route {
             .as_cuda_slice::<f32>()?
             .slice(bl.start_offset()..bl.start_offset() + 256);
         // SAFETY: the routing kernel initializes every field, including padding.
-        let mut plan = unsafe { dev.alloc::<f32>(PLAN_SIZE)? };
+        let size = PLAN_SIZE + if self.compact { 544 } else { 0 };
+        let mut plan = unsafe { dev.alloc::<f32>(size)? };
         let f = dev.get_or_load_custom_func(
-            "minnow_route_mini",
+            if self.compact {
+                "minnow_route_mini_compact"
+            } else {
+                "minnow_route_mini"
+            },
             "minnow-v1",
             include_str!(concat!(env!("OUT_DIR"), "/minnow.ptx")),
         )?;
@@ -65,13 +71,43 @@ impl CustomOp2 for Route {
         .w()?;
         Ok((
             CudaStorage::wrap_cuda_slice(plan, dev.clone()),
-            Shape::from(PLAN_SIZE),
+            Shape::from(size),
         ))
     }
 }
 
 /// Opaque, GPU-resident routing result. Construction validates its source shape.
 pub struct RoutingPlan(pub(super) Tensor);
+pub struct CompactRoutingPlan {
+    pub(super) descriptors: Tensor,
+    pub(super) mix: RoutingPlan,
+}
+
+impl CompactRoutingPlan {
+    pub fn expert_ids(&self) -> Result<Tensor> {
+        self.mix.expert_ids()
+    }
+}
+pub fn route_mini_compact(
+    logits: &Tensor,
+    bias: &Tensor,
+    scale: f32,
+) -> Result<CompactRoutingPlan> {
+    if !logits.device().same_device(bias.device()) {
+        candle_core::bail!("routing inputs must share a device");
+    }
+    let p = logits.apply_op2_no_bwd(
+        bias,
+        &Route {
+            scale,
+            compact: true,
+        },
+    )?;
+    Ok(CompactRoutingPlan {
+        descriptors: p.narrow(0, 0, 544)?,
+        mix: RoutingPlan(p.narrow(0, 544, PLAN_SIZE)?),
+    })
+}
 impl RoutingPlan {
     pub fn expert_ids(&self) -> Result<Tensor> {
         self.0
@@ -85,9 +121,13 @@ pub fn route_mini(logits: &Tensor, bias: &Tensor, scale: f32) -> Result<RoutingP
     if !logits.device().same_device(bias.device()) {
         candle_core::bail!("routing inputs must share a device");
     }
-    Ok(RoutingPlan(
-        logits.apply_op2_no_bwd(bias, &Route { scale })?,
-    ))
+    Ok(RoutingPlan(logits.apply_op2_no_bwd(
+        bias,
+        &Route {
+            scale,
+            compact: false,
+        },
+    )?))
 }
 
 #[cfg(test)]

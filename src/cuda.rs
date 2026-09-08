@@ -16,9 +16,10 @@ use candle_core::{
 use half::bf16;
 pub use predict::greedy_confidence;
 mod routing;
-pub use routing::{RoutingPlan, route_mini};
+pub use routing::{CompactRoutingPlan, RoutingPlan, route_mini, route_mini_compact};
 mod routed_experts;
-pub use routed_experts::{mix_routed_experts, routed_expert_gemm};
+pub use routed_experts::{mix_compact_experts, mix_routed_experts, routed_expert_gemm};
+pub mod flash;
 pub mod nvfp4;
 mod qkv;
 pub mod quantized;

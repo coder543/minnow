@@ -42,7 +42,8 @@ and flash dimensions. `MINNOW_NVFP4_TILE_ROWS=16|32|64|128` selects a diagnostic
 row tile; production selects measured defaults by matrix shape.
 See the [NVFP4 profiling report](nvfp4-profile.md) for Nsight Systems and
 Nsight Compute commands and the distinction between full-model and fixture
-measurements.
+measurements. The [optimization follow-up](nvfp4-optimizations.md) includes
+block FlashAttention and the materialized-attention comparison commands.
 
 ## Independent reference
 

@@ -50,7 +50,7 @@ checked against an FP64 oracle. Tied maxima choose the smallest vocabulary index
 matching PyTorch; Candle's CUDA argmax can choose a different tied index.
 Stochastic sampling still uses the CPU path and Rust RNG.
 
-An optional GPU routing path computes the block-capacity selection and top eight
+The optional BF16 GPU routing path computes the block-capacity selection and top eight
 experts, produces GEMM pointer arrays on the device, and mixes their outputs.
 It uses 48 expert slots, padding unused slots with references to an already active
 expert; no weight copy is made. It is disabled by default: removing CPU round
@@ -60,12 +60,21 @@ trips did not offset the extra GEMM work on GB10. See the measured ablations in
 Transformer prefill batches and attention query tiles are independent. A query
 tile sees only committed keys and keys up to its own final block. This avoids
 computing attention to later tiles and bounds score storage without repeatedly
-visiting transformer weights. The block-softmax kernel keeps scaling, masking,
+visiting transformer weights. With `--materialized-attention`, the block-softmax
+kernel keeps scaling, masking,
 and FP32 reductions in registers, for key lengths up to 131,072. It preserves the
 BF16 score/probability rounding points, with a different FP32 reduction tree.
 Beyond 8,192 keys, a bounded-register kernel makes multiple passes over BF16
 scores. This is tiled explicit attention,
 not FlashAttention: QK scores and probabilities are still materialized in BF16.
+
+The default CUDA attention path uses a specialized FlashAttention/CUTLASS
+forward kernel with 64-query/64-key tiles and a 32-token block-causal mask. It
+reads the strided K/V cache directly, writes token-major output, and keeps score
+and probability tiles on chip. BF16 score/scaled-score rounding is retained,
+but online softmax changes probability rounding and accumulation order. It is
+the default on supported shapes; `--materialized-attention` provides the prior
+comparison path. See [measurements](nvfp4-optimizations.md).
 
 The BF16 path can differ from eager Transformers because GEMM
 shapes and accumulation order change; full FP32 reference comparisons and small
@@ -84,6 +93,14 @@ payloads and a checksummed MessagePack manifest. Quantized expert GEMMs use
 BF16 tensor-core operands for INT8 or native block-scaled FP4 operands for
 NVFP4, with FP32 accumulation. INT8 dequantizes in registers; NVFP4 quantizes
 activation rows dynamically and shares the gate/up input. Optional lossless fragment packing makes weight loads coalesced.
+NVFP4 gate and up projections share a launch with SiLU/multiply while retaining
+the original BF16 rounding points. The single-block NVFP4 path computes routing
+and compact descriptors in one GPU kernel. It sorts the 256 assignments into
+expert order, issues at most two 16-row tiles per active expert, and mixes the
+compact output in the original FP32 order. Routing, descriptors, and mixture
+weights never need a host round trip. `--host-routing` selects the comparison
+path. Larger batches and unsupported/mixed projection combinations use host
+routing with grouped GEMMs; no weights are duplicated.
 Mixed layer/projection precision shares the same expert gather/mix pipeline.
 Shared experts, attention, routers, embeddings, and the head retain source precision.
 

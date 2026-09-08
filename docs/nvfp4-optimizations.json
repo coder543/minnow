@@ -1,0 +1,1772 @@
+{
+  "device": "NVIDIA GB10",
+  "cuda": "13",
+  "date": "2026-09-08",
+  "baseline_commit": "9121f3a",
+  "checkpoint": {
+    "container": "llada2.2-mini-nvfp4.mnw",
+    "manifest_blake3": "5c21e4537e8fdd96ed766dec59a156cffa60807bd04e1bef7ce750130aae133f",
+    "file_bytes": 10528943618
+  },
+  "settings": {
+    "iterations": 3,
+    "warmups": 1,
+    "parallel": 1,
+    "cache_prompt": false,
+    "max_tokens": 2048,
+    "prefill_chunk_tokens": 4096,
+    "attention_chunk_tokens": 1024,
+    "workspace_cache_mib": 2048,
+    "generation": {
+      "editing_threshold": 0.0,
+      "max_post_steps": 16,
+      "max_steps_per_block": 1000,
+      "max_tokens": 256,
+      "seed": 42,
+      "steps": 32,
+      "temperature": 0.0,
+      "threshold": 0.5,
+      "top_k": 0,
+      "top_p": 1.0
+    }
+  },
+  "baseline": {
+    "prefill": [
+      {
+        "tokens": 512,
+        "seconds": [
+          0.057298429,
+          0.05751395,
+          0.053828059
+        ],
+        "tokens_per_second": 9108.135736696793
+      },
+      {
+        "tokens": 2048,
+        "seconds": [
+          0.179090941,
+          0.1782082,
+          0.180690389
+        ],
+        "tokens_per_second": 11420.29659945241
+      },
+      {
+        "tokens": 4096,
+        "seconds": [
+          0.400740265,
+          0.396691155,
+          0.396592483
+        ],
+        "tokens_per_second": 10291.251263166714
+      },
+      {
+        "tokens": 8192,
+        "seconds": [
+          1.033638709,
+          1.024729623,
+          1.024258276
+        ],
+        "tokens_per_second": 7972.421939206203
+      }
+    ],
+    "decode": [
+      {
+        "name": "lhc",
+        "prompt": "What is the LHC?",
+        "useful_tokens_per_second": 92.15970274038688,
+        "mean_useful_tokens": 352.0,
+        "refinements_per_block": 18.5,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3816.354836,
+              "predicted_n": 352,
+              "predicted_per_second": 92.23461002094304,
+              "predicted_per_token_ms": 10.841917147727273,
+              "prompt_ms": 0.021856,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 222,
+            "commit_forwards": 0,
+            "blocks": 12,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "8a7268195e093377b8f7d0eae345733880938ca04b2b2dba7833f49d31b0db13"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3825.9659930000003,
+              "predicted_n": 352,
+              "predicted_per_second": 92.002908714824,
+              "predicted_per_token_ms": 10.869221571022727,
+              "prompt_ms": 0.013984,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 222,
+            "commit_forwards": 0,
+            "blocks": 12,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "8a7268195e093377b8f7d0eae345733880938ca04b2b2dba7833f49d31b0db13"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3816.0494630000003,
+              "predicted_n": 352,
+              "predicted_per_second": 92.24199094192925,
+              "predicted_per_token_ms": 10.841049610795455,
+              "prompt_ms": 0.018879999999999997,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 222,
+            "commit_forwards": 0,
+            "blocks": 12,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "8a7268195e093377b8f7d0eae345733880938ca04b2b2dba7833f49d31b0db13"
+          }
+        ]
+      },
+      {
+        "name": "react",
+        "prompt": "Write a React TypeScript example",
+        "useful_tokens_per_second": 192.89570208058566,
+        "mean_useful_tokens": 672.0,
+        "refinements_per_block": 9.272727272727273,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3486.968138,
+              "predicted_n": 672,
+              "predicted_per_second": 192.71756247977507,
+              "predicted_per_token_ms": 5.188940681547619,
+              "prompt_ms": 0.014656,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 204,
+            "commit_forwards": 0,
+            "blocks": 22,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "42ffe97ef96a3fafd54620b1e6c4e650ff921b8ff3c5d1020f85fc6bb44f6f22"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3489.4665849999997,
+              "predicted_n": 672,
+              "predicted_per_second": 192.57957731668608,
+              "predicted_per_token_ms": 5.192658608630952,
+              "prompt_ms": 0.014961,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 204,
+            "commit_forwards": 0,
+            "blocks": 22,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "42ffe97ef96a3fafd54620b1e6c4e650ff921b8ff3c5d1020f85fc6bb44f6f22"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3474.8090230000003,
+              "predicted_n": 672,
+              "predicted_per_second": 193.39192328326124,
+              "predicted_per_token_ms": 5.1708467604166675,
+              "prompt_ms": 0.015312,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 204,
+            "commit_forwards": 0,
+            "blocks": 22,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "42ffe97ef96a3fafd54620b1e6c4e650ff921b8ff3c5d1020f85fc6bb44f6f22"
+          }
+        ]
+      },
+      {
+        "name": "fellowship",
+        "prompt": "List the main characters of the Fellowship of the Ring with a short back story for each.",
+        "useful_tokens_per_second": 82.98547474346528,
+        "mean_useful_tokens": 750.0,
+        "refinements_per_block": 21.08,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 9137.035075,
+              "predicted_n": 750,
+              "predicted_per_second": 82.08351985559166,
+              "predicted_per_token_ms": 12.182713433333333,
+              "prompt_ms": 0.018528,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 527,
+            "commit_forwards": 0,
+            "blocks": 25,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "876359d2d6f5ef08586617f0f9c1576f7bba76e760b49fc5465a5c8ef557344e"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 8975.751376,
+              "predicted_n": 750,
+              "predicted_per_second": 83.5584641978167,
+              "predicted_per_token_ms": 11.967668501333334,
+              "prompt_ms": 0.020784,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 527,
+            "commit_forwards": 0,
+            "blocks": 25,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "876359d2d6f5ef08586617f0f9c1576f7bba76e760b49fc5465a5c8ef557344e"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 9000.392174,
+              "predicted_n": 750,
+              "predicted_per_second": 83.32970225081661,
+              "predicted_per_token_ms": 12.000522898666667,
+              "prompt_ms": 0.014528000000000001,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 527,
+            "commit_forwards": 0,
+            "blocks": 25,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "876359d2d6f5ef08586617f0f9c1576f7bba76e760b49fc5465a5c8ef557344e"
+          }
+        ]
+      }
+    ]
+  },
+  "routing_and_pair_materialized_attention": {
+    "prefill": [
+      {
+        "tokens": 512,
+        "seconds": [
+          0.067450954,
+          0.054840703,
+          0.052755061
+        ],
+        "tokens_per_second": 8774.80033644504
+      },
+      {
+        "tokens": 2048,
+        "seconds": [
+          0.177578042,
+          0.173950442,
+          0.179115922
+        ],
+        "tokens_per_second": 11578.375142618577
+      },
+      {
+        "tokens": 4096,
+        "seconds": [
+          0.396971018,
+          0.39001586600000004,
+          0.389835946
+        ],
+        "tokens_per_second": 10441.673705463378
+      },
+      {
+        "tokens": 8192,
+        "seconds": [
+          1.015886614,
+          1.011617332,
+          1.018639287
+        ],
+        "tokens_per_second": 8067.9068974036
+      }
+    ],
+    "decode": [
+      {
+        "name": "lhc",
+        "prompt": "What is the LHC?",
+        "useful_tokens_per_second": 96.32082804975624,
+        "mean_useful_tokens": 352.0,
+        "refinements_per_block": 18.5,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3580.899883,
+              "predicted_n": 352,
+              "predicted_per_second": 98.29931344103987,
+              "predicted_per_token_ms": 10.17301103125,
+              "prompt_ms": 0.019488000000000002,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 222,
+            "commit_forwards": 0,
+            "blocks": 12,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "8a7268195e093377b8f7d0eae345733880938ca04b2b2dba7833f49d31b0db13"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3659.6521489999996,
+              "predicted_n": 352,
+              "predicted_per_second": 96.18400483668484,
+              "predicted_per_token_ms": 10.39673905965909,
+              "prompt_ms": 0.031760000000000004,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 222,
+            "commit_forwards": 0,
+            "blocks": 12,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "8a7268195e093377b8f7d0eae345733880938ca04b2b2dba7833f49d31b0db13"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3722.8088669999997,
+              "predicted_n": 352,
+              "predicted_per_second": 94.55226216962807,
+              "predicted_per_token_ms": 10.576161553977272,
+              "prompt_ms": 0.035424,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 222,
+            "commit_forwards": 0,
+            "blocks": 12,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "8a7268195e093377b8f7d0eae345733880938ca04b2b2dba7833f49d31b0db13"
+          }
+        ]
+      },
+      {
+        "name": "react",
+        "prompt": "Write a React TypeScript example",
+        "useful_tokens_per_second": 202.33115704084113,
+        "mean_useful_tokens": 672.0,
+        "refinements_per_block": 9.272727272727273,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3270.920163,
+              "predicted_n": 672,
+              "predicted_per_second": 205.44677537578897,
+              "predicted_per_token_ms": 4.867440718749999,
+              "prompt_ms": 0.020176000000000003,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 204,
+            "commit_forwards": 0,
+            "blocks": 22,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "42ffe97ef96a3fafd54620b1e6c4e650ff921b8ff3c5d1020f85fc6bb44f6f22"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3346.560506,
+              "predicted_n": 672,
+              "predicted_per_second": 200.80318248995675,
+              "predicted_per_token_ms": 4.98000075297619,
+              "prompt_ms": 0.030848,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 204,
+            "commit_forwards": 0,
+            "blocks": 22,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "42ffe97ef96a3fafd54620b1e6c4e650ff921b8ff3c5d1020f85fc6bb44f6f22"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 3346.38268,
+              "predicted_n": 672,
+              "predicted_per_second": 200.81385312453267,
+              "predicted_per_token_ms": 4.979736130952381,
+              "prompt_ms": 0.007808000000000001,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 204,
+            "commit_forwards": 0,
+            "blocks": 22,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "42ffe97ef96a3fafd54620b1e6c4e650ff921b8ff3c5d1020f85fc6bb44f6f22"
+          }
+        ]
+      },
+      {
+        "name": "fellowship",
+        "prompt": "List the main characters of the Fellowship of the Ring with a short back story for each.",
+        "useful_tokens_per_second": 85.37887465234513,
+        "mean_useful_tokens": 750.0,
+        "refinements_per_block": 21.08,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 8879.548712999998,
+              "predicted_n": 750,
+              "predicted_per_second": 84.4637519586971,
+              "predicted_per_token_ms": 11.839398283999998,
+              "prompt_ms": 0.035840000000000004,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 527,
+            "commit_forwards": 0,
+            "blocks": 25,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "876359d2d6f5ef08586617f0f9c1576f7bba76e760b49fc5465a5c8ef557344e"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 8823.71258,
+              "predicted_n": 750,
+              "predicted_per_second": 84.99823551596239,
+              "predicted_per_token_ms": 11.764950106666666,
+              "prompt_ms": 0.01368,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 527,
+            "commit_forwards": 0,
+            "blocks": 25,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "876359d2d6f5ef08586617f0f9c1576f7bba76e760b49fc5465a5c8ef557344e"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 8649.861879,
+              "predicted_n": 750,
+              "predicted_per_second": 86.70658682086454,
+              "predicted_per_token_ms": 11.533149172,
+              "prompt_ms": 0.01848,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 527,
+            "commit_forwards": 0,
+            "blocks": 25,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "876359d2d6f5ef08586617f0f9c1576f7bba76e760b49fc5465a5c8ef557344e"
+          }
+        ]
+      }
+    ]
+  },
+  "default_block_flash_attention": {
+    "prefill": [
+      {
+        "tokens": 512,
+        "seconds": [
+          0.060707565,
+          0.04974137,
+          0.05002206
+        ],
+        "tokens_per_second": 9571.823244443645
+      },
+      {
+        "tokens": 2048,
+        "seconds": [
+          0.137715752,
+          0.133470148,
+          0.132719105
+        ],
+        "tokens_per_second": 15211.497564879146
+      },
+      {
+        "tokens": 4096,
+        "seconds": [
+          0.26191981,
+          0.262021379,
+          0.259835544
+        ],
+        "tokens_per_second": 15677.934139440704
+      },
+      {
+        "tokens": 8192,
+        "seconds": [
+          0.556106975,
+          0.555799646,
+          0.559508929
+        ],
+        "tokens_per_second": 14703.704294243285
+      }
+    ],
+    "decode": [
+      {
+        "name": "lhc",
+        "prompt": "What is the LHC?",
+        "useful_tokens_per_second": 95.3413137504356,
+        "mean_useful_tokens": 215.0,
+        "refinements_per_block": 17.375,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 2243.5266020000004,
+              "predicted_n": 215,
+              "predicted_per_second": 95.83126841836305,
+              "predicted_per_token_ms": 10.435007451162793,
+              "prompt_ms": 0.007824,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 139,
+            "commit_forwards": 0,
+            "blocks": 8,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "2ff21440ae3fd7d6ba7b762102505a93d9461b516b5f05c54516f2849949f9d1"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 2274.9361519999998,
+              "predicted_n": 215,
+              "predicted_per_second": 94.5081468818295,
+              "predicted_per_token_ms": 10.581098381395348,
+              "prompt_ms": 0.018623999999999998,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 139,
+            "commit_forwards": 0,
+            "blocks": 8,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "2ff21440ae3fd7d6ba7b762102505a93d9461b516b5f05c54516f2849949f9d1"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 2246.705195,
+              "predicted_n": 215,
+              "predicted_per_second": 95.69568828098961,
+              "predicted_per_token_ms": 10.449791604651162,
+              "prompt_ms": 0.013424,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 139,
+            "commit_forwards": 0,
+            "blocks": 8,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "2ff21440ae3fd7d6ba7b762102505a93d9461b516b5f05c54516f2849949f9d1"
+          }
+        ]
+      },
+      {
+        "name": "react",
+        "prompt": "Write a React TypeScript example",
+        "useful_tokens_per_second": 230.47383321666018,
+        "mean_useful_tokens": 1487.0,
+        "refinements_per_block": 8.361702127659575,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 6448.310046,
+              "predicted_n": 1487,
+              "predicted_per_second": 230.6030555901096,
+              "predicted_per_token_ms": 4.3364559825151305,
+              "prompt_ms": 0.008064,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 393,
+            "commit_forwards": 0,
+            "blocks": 47,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "37fe9a58cf20be019c88023bdf7eb476e95f34826e0c223babf33bd686430a48"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 6448.661306999999,
+              "predicted_n": 1487,
+              "predicted_per_second": 230.5904945551826,
+              "predicted_per_token_ms": 4.336692203765971,
+              "prompt_ms": 0.007744000000000001,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 393,
+            "commit_forwards": 0,
+            "blocks": 47,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "37fe9a58cf20be019c88023bdf7eb476e95f34826e0c223babf33bd686430a48"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 6458.805125999999,
+              "predicted_n": 1487,
+              "predicted_per_second": 230.22834270290386,
+              "predicted_per_token_ms": 4.343513870880968,
+              "prompt_ms": 0.014144,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 393,
+            "commit_forwards": 0,
+            "blocks": 47,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "37fe9a58cf20be019c88023bdf7eb476e95f34826e0c223babf33bd686430a48"
+          }
+        ]
+      },
+      {
+        "name": "fellowship",
+        "prompt": "List the main characters of the Fellowship of the Ring with a short back story for each.",
+        "useful_tokens_per_second": 78.18592116995656,
+        "mean_useful_tokens": 745.0,
+        "refinements_per_block": 22.76,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 9442.670624,
+              "predicted_n": 745,
+              "predicted_per_second": 78.89717111454337,
+              "predicted_per_token_ms": 12.674725669798658,
+              "prompt_ms": 0.013184,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 569,
+            "commit_forwards": 1,
+            "blocks": 25,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "e43e27ddfb025b555a64eca35600a6f4f9e2529898e09cdf23ac2711dbdd995a"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 9584.353905999998,
+              "predicted_n": 745,
+              "predicted_per_second": 77.73085252346692,
+              "predicted_per_token_ms": 12.864904571812078,
+              "prompt_ms": 0.018224,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 569,
+            "commit_forwards": 1,
+            "blocks": 25,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "e43e27ddfb025b555a64eca35600a6f4f9e2529898e09cdf23ac2711dbdd995a"
+          },
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 9558.684592000001,
+              "predicted_n": 745,
+              "predicted_per_second": 77.93959438974655,
+              "predicted_per_token_ms": 12.830449116778526,
+              "prompt_ms": 0.015041,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 569,
+            "commit_forwards": 1,
+            "blocks": 25,
+            "finish_reason": "stop",
+            "matches_warmup": true,
+            "text_sha256": "e43e27ddfb025b555a64eca35600a6f4f9e2529898e09cdf23ac2711dbdd995a"
+          }
+        ]
+      }
+    ]
+  },
+  "attention_microbenchmark": [
+    {
+      "milliseconds": 7.6669012,
+      "mode": "materialized",
+      "offset": 0,
+      "queries": 4096
+    },
+    {
+      "milliseconds": 0.9290477000000001,
+      "mode": "flash",
+      "offset": 0,
+      "queries": 4096
+    },
+    {
+      "milliseconds": 26.194719,
+      "mode": "materialized",
+      "offset": 0,
+      "queries": 8192
+    },
+    {
+      "milliseconds": 3.3762451999999996,
+      "mode": "flash",
+      "offset": 0,
+      "queries": 8192
+    },
+    {
+      "milliseconds": 0.0674067,
+      "mode": "materialized",
+      "offset": 4096,
+      "queries": 32
+    },
+    {
+      "milliseconds": 0.1009509,
+      "mode": "flash",
+      "offset": 4096,
+      "queries": 32
+    }
+  ],
+  "attention_model_comparison": [
+    {
+      "forward_seconds": [
+        0.390303103,
+        0.01722186
+      ],
+      "layer_errors": [
+        {
+          "max": 0.0,
+          "name": "layers.0.query",
+          "rms": 0.0
+        },
+        {
+          "max": 0.0,
+          "name": "layers.0.key",
+          "rms": 0.0
+        },
+        {
+          "max": 0.0,
+          "name": "layers.0.value",
+          "rms": 0.0
+        },
+        {
+          "max": 0.00048828125,
+          "name": "layers.0.attention_output",
+          "rms": 2.9279245335451026e-05
+        },
+        {
+          "max": 0.0078125,
+          "name": "layers.0.attention",
+          "rms": 8.304327225874369e-05
+        },
+        {
+          "max": 0.015625,
+          "name": "layers.0.hidden",
+          "rms": 0.00018528531199933147
+        },
+        {
+          "max": 0.0625,
+          "name": "layers.1.query",
+          "rms": 0.006074005829690204
+        },
+        {
+          "max": 0.25,
+          "name": "layers.1.key",
+          "rms": 0.009261960445622757
+        },
+        {
+          "max": 0.0009765625,
+          "name": "layers.1.value",
+          "rms": 0.00014579877349632942
+        },
+        {
+          "max": 0.005615234375,
+          "name": "layers.1.attention_output",
+          "rms": 0.00023215495017746212
+        },
+        {
+          "max": 0.015625,
+          "name": "layers.1.attention",
+          "rms": 0.00040281681883085996
+        },
+        {
+          "max": 0.0341796875,
+          "name": "layers.1.hidden",
+          "rms": 0.0024589272319341655
+        },
+        {
+          "max": 0.625,
+          "name": "layers.2.query",
+          "rms": 0.028031803461638596
+        },
+        {
+          "max": 0.5,
+          "name": "layers.2.key",
+          "rms": 0.028650878175796722
+        },
+        {
+          "max": 0.04150390625,
+          "name": "layers.2.value",
+          "rms": 0.003402370541076269
+        },
+        {
+          "max": 0.02734375,
+          "name": "layers.2.attention_output",
+          "rms": 0.0013543271235280155
+        },
+        {
+          "max": 0.046875,
+          "name": "layers.2.attention",
+          "rms": 0.0029823007348480164
+        },
+        {
+          "max": 0.3125,
+          "name": "layers.2.hidden",
+          "rms": 0.007994936723306756
+        },
+        {
+          "max": 0.4921875,
+          "name": "layers.3.query",
+          "rms": 0.055439183460120646
+        },
+        {
+          "max": 0.546875,
+          "name": "layers.3.key",
+          "rms": 0.062122283746874056
+        },
+        {
+          "max": 0.03564453125,
+          "name": "layers.3.value",
+          "rms": 0.006115872274342223
+        },
+        {
+          "max": 0.02490234375,
+          "name": "layers.3.attention_output",
+          "rms": 0.0024380282356484544
+        },
+        {
+          "max": 0.28125,
+          "name": "layers.3.attention",
+          "rms": 0.00867336605568587
+        },
+        {
+          "max": 0.25,
+          "name": "layers.3.hidden",
+          "rms": 0.013925950894059716
+        },
+        {
+          "max": 0.5,
+          "name": "layers.4.query",
+          "rms": 0.05470681824613512
+        },
+        {
+          "max": 1.25,
+          "name": "layers.4.key",
+          "rms": 0.07580100243089366
+        },
+        {
+          "max": 0.1162109375,
+          "name": "layers.4.value",
+          "rms": 0.01842497898239659
+        },
+        {
+          "max": 0.0546875,
+          "name": "layers.4.attention_output",
+          "rms": 0.005740729889758073
+        },
+        {
+          "max": 0.4375,
+          "name": "layers.4.attention",
+          "rms": 0.015509954312990343
+        },
+        {
+          "max": 0.375,
+          "name": "layers.4.hidden",
+          "rms": 0.030163625714133224
+        },
+        {
+          "max": 0.9765625,
+          "name": "layers.5.query",
+          "rms": 0.10100418982222775
+        },
+        {
+          "max": 2.0,
+          "name": "layers.5.key",
+          "rms": 0.12687446934543947
+        },
+        {
+          "max": 0.2080078125,
+          "name": "layers.5.value",
+          "rms": 0.03188811119791842
+        },
+        {
+          "max": 0.10546875,
+          "name": "layers.5.attention_output",
+          "rms": 0.01124484635396644
+        },
+        {
+          "max": 0.75,
+          "name": "layers.5.attention",
+          "rms": 0.03344575113874847
+        },
+        {
+          "max": 0.75,
+          "name": "layers.5.hidden",
+          "rms": 0.04701203473737724
+        },
+        {
+          "max": 1.25,
+          "name": "layers.6.query",
+          "rms": 0.12337610765968346
+        },
+        {
+          "max": 1.125,
+          "name": "layers.6.key",
+          "rms": 0.1341175734461773
+        },
+        {
+          "max": 0.2578125,
+          "name": "layers.6.value",
+          "rms": 0.04259573525454548
+        },
+        {
+          "max": 0.31640625,
+          "name": "layers.6.attention_output",
+          "rms": 0.01931030020464989
+        },
+        {
+          "max": 0.9375,
+          "name": "layers.6.attention",
+          "rms": 0.05041604816741787
+        },
+        {
+          "max": 0.625,
+          "name": "layers.6.hidden",
+          "rms": 0.06601820363296829
+        },
+        {
+          "max": 0.94140625,
+          "name": "layers.7.query",
+          "rms": 0.11774390746577382
+        },
+        {
+          "max": 2.5,
+          "name": "layers.7.key",
+          "rms": 0.15305231547613543
+        },
+        {
+          "max": 0.37109375,
+          "name": "layers.7.value",
+          "rms": 0.0672391276434667
+        },
+        {
+          "max": 0.20703125,
+          "name": "layers.7.attention_output",
+          "rms": 0.029834639342674125
+        },
+        {
+          "max": 0.875,
+          "name": "layers.7.attention",
+          "rms": 0.07519235496031967
+        },
+        {
+          "max": 5.5,
+          "name": "layers.7.hidden",
+          "rms": 0.09835854476818758
+        },
+        {
+          "max": 1.2421875,
+          "name": "layers.8.query",
+          "rms": 0.139126077708403
+        },
+        {
+          "max": 1.5,
+          "name": "layers.8.key",
+          "rms": 0.14813325578037875
+        },
+        {
+          "max": 0.4853515625,
+          "name": "layers.8.value",
+          "rms": 0.08612040663840484
+        },
+        {
+          "max": 0.359375,
+          "name": "layers.8.attention_output",
+          "rms": 0.04015723633126062
+        },
+        {
+          "max": 5.5,
+          "name": "layers.8.attention",
+          "rms": 0.10605051765003214
+        },
+        {
+          "max": 5.5,
+          "name": "layers.8.hidden",
+          "rms": 0.12665631948122388
+        },
+        {
+          "max": 1.1171875,
+          "name": "layers.9.query",
+          "rms": 0.1585951147901495
+        },
+        {
+          "max": 1.5,
+          "name": "layers.9.key",
+          "rms": 0.18570084937031583
+        },
+        {
+          "max": 0.6640625,
+          "name": "layers.9.value",
+          "rms": 0.11573041919337024
+        },
+        {
+          "max": 0.5234375,
+          "name": "layers.9.attention_output",
+          "rms": 0.05423567225773057
+        },
+        {
+          "max": 5.0,
+          "name": "layers.9.attention",
+          "rms": 0.1379464975403964
+        },
+        {
+          "max": 10.0,
+          "name": "layers.9.hidden",
+          "rms": 0.17133394424114257
+        },
+        {
+          "max": 1.1875,
+          "name": "layers.10.query",
+          "rms": 0.15631338350628976
+        },
+        {
+          "max": 2.75,
+          "name": "layers.10.key",
+          "rms": 0.1721608512302123
+        },
+        {
+          "max": 0.8818359375,
+          "name": "layers.10.value",
+          "rms": 0.17729972592403925
+        },
+        {
+          "max": 0.591796875,
+          "name": "layers.10.attention_output",
+          "rms": 0.0608402550577892
+        },
+        {
+          "max": 10.0,
+          "name": "layers.10.attention",
+          "rms": 0.18566592715531968
+        },
+        {
+          "max": 11.0,
+          "name": "layers.10.hidden",
+          "rms": 0.22580902646328796
+        },
+        {
+          "max": 1.24609375,
+          "name": "layers.11.query",
+          "rms": 0.14802890313624095
+        },
+        {
+          "max": 2.125,
+          "name": "layers.11.key",
+          "rms": 0.17907817903765483
+        },
+        {
+          "max": 1.83203125,
+          "name": "layers.11.value",
+          "rms": 0.28151348733830606
+        },
+        {
+          "max": 1.05078125,
+          "name": "layers.11.attention_output",
+          "rms": 0.10377890773670105
+        },
+        {
+          "max": 11.0,
+          "name": "layers.11.attention",
+          "rms": 0.2454722137367266
+        },
+        {
+          "max": 16.0,
+          "name": "layers.11.hidden",
+          "rms": 0.31584024294024915
+        },
+        {
+          "max": 1.3125,
+          "name": "layers.12.query",
+          "rms": 0.152807520607966
+        },
+        {
+          "max": 2.5,
+          "name": "layers.12.key",
+          "rms": 0.17710958153368947
+        },
+        {
+          "max": 1.638671875,
+          "name": "layers.12.value",
+          "rms": 0.31509086245326146
+        },
+        {
+          "max": 1.1875,
+          "name": "layers.12.attention_output",
+          "rms": 0.1283156396536865
+        },
+        {
+          "max": 16.0,
+          "name": "layers.12.attention",
+          "rms": 0.34115756624612503
+        },
+        {
+          "max": 16.0,
+          "name": "layers.12.hidden",
+          "rms": 0.4215308382096362
+        },
+        {
+          "max": 1.5,
+          "name": "layers.13.query",
+          "rms": 0.15199073185881878
+        },
+        {
+          "max": 2.0,
+          "name": "layers.13.key",
+          "rms": 0.18487114315123596
+        },
+        {
+          "max": 2.12109375,
+          "name": "layers.13.value",
+          "rms": 0.36977645909628604
+        },
+        {
+          "max": 2.59375,
+          "name": "layers.13.attention_output",
+          "rms": 0.1664461029492222
+        },
+        {
+          "max": 16.0,
+          "name": "layers.13.attention",
+          "rms": 0.4711770264736036
+        },
+        {
+          "max": 16.0,
+          "name": "layers.13.hidden",
+          "rms": 0.5739924374889611
+        },
+        {
+          "max": 1.359375,
+          "name": "layers.14.query",
+          "rms": 0.15723827953333702
+        },
+        {
+          "max": 1.796875,
+          "name": "layers.14.key",
+          "rms": 0.16192123893552401
+        },
+        {
+          "max": 2.220703125,
+          "name": "layers.14.value",
+          "rms": 0.42899127640892437
+        },
+        {
+          "max": 2.28125,
+          "name": "layers.14.attention_output",
+          "rms": 0.21059111232190947
+        },
+        {
+          "max": 16.0,
+          "name": "layers.14.attention",
+          "rms": 0.6176347277721863
+        },
+        {
+          "max": 16.0,
+          "name": "layers.14.hidden",
+          "rms": 0.799707390998733
+        },
+        {
+          "max": 1.375,
+          "name": "layers.15.query",
+          "rms": 0.14741626823166343
+        },
+        {
+          "max": 1.5,
+          "name": "layers.15.key",
+          "rms": 0.15645899382649173
+        },
+        {
+          "max": 3.59375,
+          "name": "layers.15.value",
+          "rms": 0.622852361824191
+        },
+        {
+          "max": 2.8125,
+          "name": "layers.15.attention_output",
+          "rms": 0.33228326917872675
+        },
+        {
+          "max": 16.0,
+          "name": "layers.15.attention",
+          "rms": 0.8408897814724479
+        },
+        {
+          "max": 23.0,
+          "name": "layers.15.hidden",
+          "rms": 1.024275538328919
+        },
+        {
+          "max": 1.390625,
+          "name": "layers.16.query",
+          "rms": 0.14354270111181516
+        },
+        {
+          "max": 1.0,
+          "name": "layers.16.key",
+          "rms": 0.15329592805058637
+        },
+        {
+          "max": 5.875,
+          "name": "layers.16.value",
+          "rms": 0.9760402162327118
+        },
+        {
+          "max": 4.375,
+          "name": "layers.16.attention_output",
+          "rms": 0.4136824232720196
+        },
+        {
+          "max": 21.0,
+          "name": "layers.16.attention",
+          "rms": 1.1153891003660013
+        },
+        {
+          "max": 16.0,
+          "name": "layers.16.hidden",
+          "rms": 1.2840229323695496
+        },
+        {
+          "max": 1.375,
+          "name": "layers.17.query",
+          "rms": 0.1245968219574656
+        },
+        {
+          "max": 0.7734375,
+          "name": "layers.17.key",
+          "rms": 0.11914465249816084
+        },
+        {
+          "max": 4.93359375,
+          "name": "layers.17.value",
+          "rms": 0.9411897748332553
+        },
+        {
+          "max": 4.6875,
+          "name": "layers.17.attention_output",
+          "rms": 0.41086779125183237
+        },
+        {
+          "max": 16.0,
+          "name": "layers.17.attention",
+          "rms": 1.3392135711623163
+        },
+        {
+          "max": 22.0,
+          "name": "layers.17.hidden",
+          "rms": 1.7465720136386318
+        },
+        {
+          "max": 1.4423828125,
+          "name": "layers.18.query",
+          "rms": 0.15283472305237322
+        },
+        {
+          "max": 0.875,
+          "name": "layers.18.key",
+          "rms": 0.12011396678733657
+        },
+        {
+          "max": 7.4140625,
+          "name": "layers.18.value",
+          "rms": 1.2631027963335444
+        },
+        {
+          "max": 4.40625,
+          "name": "layers.18.attention_output",
+          "rms": 0.5525359968273089
+        },
+        {
+          "max": 34.0,
+          "name": "layers.18.attention",
+          "rms": 1.7950792685483237
+        },
+        {
+          "max": 102.0,
+          "name": "layers.18.hidden",
+          "rms": 2.215512988894655
+        },
+        {
+          "max": 3.390625,
+          "name": "layers.19.query",
+          "rms": 0.17524301101863551
+        },
+        {
+          "max": 2.0234375,
+          "name": "layers.19.key",
+          "rms": 0.13942163951734593
+        },
+        {
+          "max": 8.5,
+          "name": "layers.19.value",
+          "rms": 1.6718249481912657
+        },
+        {
+          "max": 7.8125,
+          "name": "layers.19.attention_output",
+          "rms": 1.121181025753283
+        },
+        {
+          "max": 101.0,
+          "name": "layers.19.attention",
+          "rms": 2.3885310044679557
+        },
+        {
+          "max": 108.0,
+          "name": "layers.19.hidden",
+          "rms": 3.0907823850432172
+        }
+      ],
+      "maximum_logit_error": 4.40625,
+      "mean_kl_baseline_to_flash": 0.022000783063334767,
+      "positions": 32,
+      "prefix_tokens": 0,
+      "rms_logit_error": 0.4788606197535244,
+      "top1_agreement": 31
+    },
+    {
+      "forward_seconds": [
+        0.01772623,
+        0.015879821
+      ],
+      "layer_errors": [],
+      "maximum_logit_error": 1.8828125,
+      "mean_kl_baseline_to_flash": 0.01147768902475845,
+      "positions": 32,
+      "prefix_tokens": 128,
+      "rms_logit_error": 0.2739798652859096,
+      "top1_agreement": 32
+    },
+    {
+      "forward_seconds": [
+        0.016462464,
+        0.015817341
+      ],
+      "layer_errors": [],
+      "maximum_logit_error": 2.15625,
+      "mean_kl_baseline_to_flash": 0.001096190489650234,
+      "positions": 32,
+      "prefix_tokens": 512,
+      "rms_logit_error": 0.27188884451183154,
+      "top1_agreement": 32
+    },
+    {
+      "forward_seconds": [
+        0.017628598,
+        0.017439029
+      ],
+      "layer_errors": [],
+      "maximum_logit_error": 4.640625,
+      "mean_kl_baseline_to_flash": 0.0480369980477317,
+      "positions": 32,
+      "prefix_tokens": 2048,
+      "rms_logit_error": 0.6230669397478401,
+      "top1_agreement": 29
+    },
+    {
+      "forward_seconds": [
+        0.019780609,
+        0.020866246
+      ],
+      "layer_errors": [],
+      "maximum_logit_error": 3.40625,
+      "mean_kl_baseline_to_flash": 9.535927857026548e-05,
+      "positions": 32,
+      "prefix_tokens": 8192,
+      "rms_logit_error": 0.4083138306886536,
+      "top1_agreement": 32
+    }
+  ],
+  "prefill_nsight_systems": {
+    "prompt_tokens": 4096,
+    "seconds": 0.259784505,
+    "gpu_timeline_span_ms": 259.693056,
+    "gpu_busy_ms": 189.515136,
+    "gpu_idle_fraction": 0.2702341028325378,
+    "summed_activity_ms": {
+      "KERNEL": 187.22112,
+      "MEMCPY": 1.742496,
+      "MEMSET": 0.634592
+    },
+    "kernels": [
+      {
+        "name": "minnow_nvfp4_pair_16",
+        "milliseconds": 47.638048,
+        "instances": 19,
+        "kernel_time_percent": 25.4
+      },
+      {
+        "name": "minnow_nvfp4_gemm_32",
+        "milliseconds": 31.268736,
+        "instances": 19,
+        "kernel_time_percent": 16.7
+      },
+      {
+        "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_tn_align8>(T1::Params)",
+        "milliseconds": 22.299008,
+        "instances": 59,
+        "kernel_time_percent": 11.9
+      },
+      {
+        "name": "minnow_flash_block32",
+        "milliseconds": 18.009088,
+        "instances": 20,
+        "kernel_time_percent": 9.6
+      },
+      {
+        "name": "badd_bf16",
+        "milliseconds": 14.022336,
+        "instances": 59,
+        "kernel_time_percent": 7.5
+      },
+      {
+        "name": "minnow_mix_experts_8",
+        "milliseconds": 13.999008,
+        "instances": 19,
+        "kernel_time_percent": 7.5
+      },
+      {
+        "name": "minnow_rms_norm_bf16",
+        "milliseconds": 9.631584,
+        "instances": 41,
+        "kernel_time_percent": 5.1
+      },
+      {
+        "name": "void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_tn_align1>(T1::Params)",
+        "milliseconds": 6.358112,
+        "instances": 19,
+        "kernel_time_percent": 3.4
+      },
+      {
+        "name": "minnow_prepare_qkv",
+        "milliseconds": 5.361408,
+        "instances": 20,
+        "kernel_time_percent": 2.9
+      },
+      {
+        "name": "nvjet_sm121_tst_mma_128x176x64_2_32x88x64_tmaAB_bz_TNNN",
+        "milliseconds": 4.106592,
+        "instances": 38,
+        "kernel_time_percent": 2.2
+      },
+      {
+        "name": "cast_bf16_f32",
+        "milliseconds": 4.012512,
+        "instances": 19,
+        "kernel_time_percent": 2.1
+      },
+      {
+        "name": "minnow_nvfp4_quantize_512",
+        "milliseconds": 3.06048,
+        "instances": 19,
+        "kernel_time_percent": 1.6
+      },
+      {
+        "name": "nvjet_sm121_tst_mma_128x208x64_2_32x104x64_tmaAB_bz_TNNN",
+        "milliseconds": 1.847456,
+        "instances": 2,
+        "kernel_time_percent": 1.0
+      },
+      {
+        "name": "minnow_nvfp4_quantize_2048",
+        "milliseconds": 1.582784,
+        "instances": 19,
+        "kernel_time_percent": 0.8
+      },
+      {
+        "name": "minnow_silu_mul_bf16",
+        "milliseconds": 1.509728,
+        "instances": 20,
+        "kernel_time_percent": 0.8
+      },
+      {
+        "name": "copy2d_bf16",
+        "milliseconds": 1.039936,
+        "instances": 40,
+        "kernel_time_percent": 0.6
+      },
+      {
+        "name": "nvjet_sm121_tst_mma_192x160x64_2_96x40x64_tmaAB_bz_TNNN",
+        "milliseconds": 0.95264,
+        "instances": 1,
+        "kernel_time_percent": 0.5
+      },
+      {
+        "name": "usigmoid_f32",
+        "milliseconds": 0.26848,
+        "instances": 19,
+        "kernel_time_percent": 0.1
+      },
+      {
+        "name": "is_u32_bf16",
+        "milliseconds": 0.22592,
+        "instances": 1,
+        "kernel_time_percent": 0.1
+      },
+      {
+        "name": "cast_f32_bf16",
+        "milliseconds": 0.01216,
+        "instances": 2,
+        "kernel_time_percent": 0.0
+      },
+      {
+        "name": "ucos_f32",
+        "milliseconds": 0.00976,
+        "instances": 1,
+        "kernel_time_percent": 0.0
+      },
+      {
+        "name": "usin_f32",
+        "milliseconds": 0.005344,
+        "instances": 1,
+        "kernel_time_percent": 0.0
+      }
+    ]
+  },
+  "attention_nsight_compute": {
+    "scope": "synthetic mini 4096-query attention, one cache-flushed kernel replay capture; not whole-model counters",
+    "metrics": {
+      "gpu__time_duration.sum": {
+        "value": 925.248,
+        "unit": "us"
+      },
+      "lts__d_sectors_fill_sysmem.sum": {
+        "value": 790698.0,
+        "unit": "sector"
+      },
+      "lts__t_sectors_op_read.sum": {
+        "value": 34612392.0,
+        "unit": "sector"
+      },
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+        "value": 64.168396,
+        "unit": "%"
+      },
+      "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+        "value": 64.168396,
+        "unit": "%"
+      }
+    },
+    "system_memory_fill_bytes": 25302336,
+    "system_memory_fill_gb_per_second": 27.346544926333262
+  },
+  "flash_spot_check": {
+    "checkpoint": {
+      "container": "llada2.2-flash-nvfp4.mnw",
+      "manifest_blake3": "827f88e98390cb39829f9da842ef89991b52d71c0d62cd723eb8ed51eef18bcb",
+      "file_bytes": 62249301239
+    },
+    "warmups": 1,
+    "iterations": 1,
+    "prefill": [
+      {
+        "tokens": 512,
+        "seconds": [
+          0.252260261
+        ],
+        "tokens_per_second": 2029.649846433799
+      },
+      {
+        "tokens": 2048,
+        "seconds": [
+          0.578703459
+        ],
+        "tokens_per_second": 3538.945496436025
+      },
+      {
+        "tokens": 4096,
+        "seconds": [
+          1.041744294
+        ],
+        "tokens_per_second": 3931.866988464638
+      },
+      {
+        "tokens": 8192,
+        "seconds": [
+          2.194377647
+        ],
+        "tokens_per_second": 3733.1769265876046
+      }
+    ],
+    "decode": [
+      {
+        "name": "lhc",
+        "prompt": "What is the LHC?",
+        "max_tokens": 2048,
+        "useful_decode_tokens_per_second": 28.037624459858105,
+        "mean_useful_tokens": 350.0,
+        "refinements_per_block": 13.166666666666666,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 12483.225906000001,
+              "predicted_n": 350,
+              "predicted_per_second": 28.037624459858105,
+              "predicted_per_token_ms": 35.66635973142858,
+              "prompt_ms": 0.010064,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 158,
+            "blocks": 12,
+            "matches_warmup": true,
+            "finish_reason": "stop",
+            "text_sha256": "7efba8410d52c2bdc5e3ef57f7fc937747aae29696b5d75a4a8cef1f9f3e8d70"
+          }
+        ]
+      },
+      {
+        "name": "react",
+        "prompt": "Write a React TypeScript example",
+        "max_tokens": 2048,
+        "useful_decode_tokens_per_second": 94.05673284104405,
+        "mean_useful_tokens": 2048.0,
+        "refinements_per_block": 4.538461538461538,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 21774.092488,
+              "predicted_n": 2048,
+              "predicted_per_second": 94.05673284104405,
+              "predicted_per_token_ms": 10.63188109765625,
+              "prompt_ms": 0.029169,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 295,
+            "blocks": 65,
+            "matches_warmup": true,
+            "finish_reason": "length",
+            "text_sha256": "48e335a7c0d071e864dbea5b8fa0a5512b24eeff7e57c640ec6aa8f55d82925f"
+          }
+        ]
+      },
+      {
+        "name": "fellowship",
+        "prompt": "List the main characters of the Fellowship of the Ring with a short back story for each.",
+        "max_tokens": 2048,
+        "useful_decode_tokens_per_second": 22.640362640804845,
+        "mean_useful_tokens": 808.0,
+        "refinements_per_block": 17.296296296296298,
+        "runs": [
+          {
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 35688.474289000005,
+              "predicted_n": 808,
+              "predicted_per_second": 22.640362640804845,
+              "predicted_per_token_ms": 44.16890382301981,
+              "prompt_ms": 0.016624,
+              "prompt_n": 0,
+              "prompt_per_second": 0.0,
+              "prompt_per_token_ms": 0.0
+            },
+            "denoise_forwards": 467,
+            "blocks": 27,
+            "matches_warmup": true,
+            "finish_reason": "stop",
+            "text_sha256": "1ea28c9b6be574bc95b1886df0b0c04591a46aa646516bd1b48f9a2dff943226"
+          }
+        ]
+      }
+    ],
+    "peak_system_memory_growth_bytes": 66017218560
+  },
+  "validation": {
+    "materialized_and_flash_attention": [
+      "Chat Completions and text Completions",
+      "SSE prefill progress completes before content",
+      "tool calls and tool-result history",
+      "prefix growth, forks, LRU eviction, and warm/cold text comparisons"
+    ],
+    "continuous_batching": {
+      "passed": true,
+      "max_observed_batch_size": 3,
+      "cancellation": true
+    },
+    "memory_guard_aborts": false
+  }
+}
