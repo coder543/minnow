@@ -13,11 +13,11 @@
   "tests_per_target": 33,
   "binaries": {
     "a": {
-      "path": "/mnt/truenas/composer/workspace/minnow/artifacts/arch-comparison/minnow-compute80",
+      "path": "artifacts/arch-comparison/minnow-compute80",
       "sha256": "c1f4f48d41ed9e0cb8652ca06a9f5462cf001c823a0d89c1cb0d36c8e7ed4ddc"
     },
     "b": {
-      "path": "/mnt/truenas/composer/workspace/minnow/artifacts/arch-comparison/minnow-compute121",
+      "path": "artifacts/arch-comparison/minnow-compute121",
       "sha256": "117f87a205e128197771b17d17c8e3c04e53be546f63731310bfcc532de1863b"
     }
   },

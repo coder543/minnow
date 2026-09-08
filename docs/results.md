@@ -2,8 +2,7 @@
 
 Measurements on September 7, 2026 (local time), NVIDIA GB10, CUDA 13.0,
 Candle 0.11.0, release build. The oracle used PyTorch 2.10.0+cu130 and
-Transformers 5.2.0. PyTorch warns that its packaged architecture range ends at
-SM 12.0 while this device is SM 12.1; the reference runs completed successfully.
+Transformers 5.2.0.
 These are development measurements, not a task-quality benchmark.
 Machine-readable timings are in [results.json](results.json).
 See the subsequent [prefill and useful generation comparison](throughput-comparison.md)
@@ -12,15 +11,10 @@ The Transformers generation timings below used eager attention.
 
 ## Storage and memory
 
-All 20 checkpoint files were copied to
-`~/models/hf/inclusionAI/LLaDA2.2-mini` and verified against source SHA-256 hashes.
-Copy plus verification took 142.38 seconds. The original network checkout was
-read-only throughout. The runtime uses 8 MiB bounded direct reads with no mmap.
+The benchmark used bounded direct reads into final tensor allocations.
 
 | Measurement | Result |
 | --- | ---: |
-| Load BF16 from original network share | 279.25 s |
-| Load BF16 from local NVMe | 8.36 s |
 | Checkpoint BF16 tensor bytes | 30.28 GiB |
 | FP32 tensor bytes | 60.56 GiB |
 | HTTP generation: peak system-memory growth | 31.88 GiB |
@@ -35,9 +29,7 @@ sharing packed expert views, and holding an exclusive cross-process model lock.
 "Mini" has about 16.26 billion total MoE parameters. Sparse activation reduces
 computation, but the resident unquantized weight set still occupies 30.28 GiB.
 
-The prior memory exhaustion came from retaining complete CPU and CUDA FP32
-models on shared system RAM. That loading path has been removed. A 128K BF16
-KV cache itself is 5 GiB; full 128K serving performance has not been measured.
+A 128K BF16 K/V cache is 5 GiB; full 128K serving performance was not measured.
 
 ## Numerical checks
 

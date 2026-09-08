@@ -24,7 +24,7 @@ disable_progress_bar()
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--model", type=Path, default=Path.home() / "models/hf/inclusionAI/LLaDA2.2-mini")
+    p.add_argument("--model", type=Path, required=True)
     p.add_argument("--output", type=Path, default=Path("artifacts/tiny"))
     p.add_argument("--real", action="store_true")
     p.add_argument("--device", default="cpu")

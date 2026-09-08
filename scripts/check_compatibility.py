@@ -17,12 +17,14 @@ from urllib.request import Request, urlopen
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--url', default='http://127.0.0.1:18089')
+    p.add_argument('--url', default='http://127.0.0.1:8080')
     p.add_argument('--spawn', action='store_true')
     p.add_argument('--model', type=Path, help='checkpoint directory or .mnw file for --spawn')
     p.add_argument('--ui-dir', type=Path)
     p.add_argument('--report',type=Path,default=Path('artifacts/api-compatibility.json'))
     args=p.parse_args()
+    if args.spawn and not args.model: p.error("--spawn requires --model")
+    args.report.parent.mkdir(parents=True, exist_ok=True)
     process=None
     logfile=None
     if args.spawn:

@@ -19,6 +19,7 @@ mod routing;
 pub use routing::{RoutingPlan, route_mini};
 mod routed_experts;
 pub use routed_experts::{mix_routed_experts, routed_expert_gemm};
+pub mod nvfp4;
 mod qkv;
 pub mod quantized;
 pub mod workspace;

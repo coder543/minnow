@@ -142,12 +142,12 @@ fn mixed_quantization_matches_a_separately_decoded_checkpoint() -> Result<()> {
         &source,
         &dest,
         &Conversion {
-            expert_encoding: Some(Encoding::Fp4E2m1),
+            expert_encoding: Some(Encoding::I8Sym),
             group_size: 16,
             rules: vec![TensorRule {
                 prefix: "model.layers.2.mlp.experts.".into(),
-                encoding: Some(Encoding::I8Sym),
-                group_size: 16,
+                encoding: None,
+                group_size: 0,
             }],
         },
     )?;
@@ -156,10 +156,10 @@ fn mixed_quantization_matches_a_separately_decoded_checkpoint() -> Result<()> {
     let mut file = std::fs::File::open(&dest)?;
     let mut encodings = std::collections::HashSet::new();
     for (name, t) in &container.manifest.tensors {
+        encodings.insert((format!("{:?}", t.encoding), t.group_size));
         if !t.encoding.quantized() {
             continue;
         }
-        encodings.insert(format!("{:?}", t.encoding));
         let mut codes = vec![0; t.data.bytes as usize];
         file.seek(SeekFrom::Start(t.data.offset))?;
         file.read_exact(&mut codes)?;
@@ -200,12 +200,12 @@ fn mixed_quantization_matches_a_separately_decoded_checkpoint() -> Result<()> {
         &dest,
         &packed,
         &Conversion {
-            expert_encoding: Some(Encoding::Fp4Mma),
+            expert_encoding: Some(Encoding::I8Mma),
             group_size: 16,
             rules: vec![TensorRule {
                 prefix: "model.layers.2.mlp.experts.".into(),
-                encoding: Some(Encoding::I8Mma),
-                group_size: 16,
+                encoding: None,
+                group_size: 0,
             }],
         },
     )?;
@@ -216,12 +216,91 @@ fn mixed_quantization_matches_a_separately_decoded_checkpoint() -> Result<()> {
             &fixture.0.join("invalid.mnw"),
             &Conversion {
                 expert_encoding: Some(Encoding::I8Mma),
-                group_size: 16,
+                group_size: 32,
                 rules: vec![]
             }
         )
         .is_err(),
-        "repacking must not silently change precision"
+        "repacking must not silently change group size"
+    );
+    Ok(())
+}
+
+#[test]
+fn nvfp4_container_preserves_native_scales_and_rejects_requantization() -> Result<()> {
+    use minnow::container::{Encoding, TensorRule};
+    let fixture = Fixture::new()?;
+    let source = fixture.0.join("source");
+    let mut weights =
+        candle_core::safetensors::load(source.join("model.safetensors"), &Device::Cpu)?;
+    let mut rules = Vec::new();
+    // Exercise converter metadata with N8/K64 expert matrices without depending
+    // on a full checkpoint. The original fixture has smaller K dimensions.
+    for e in 0..8 {
+        let name = format!("model.layers.1.mlp.experts.{e}.gate_proj.weight");
+        weights.insert(
+            name.clone(),
+            candle_core::Tensor::from_vec(
+                (0..16 * 64)
+                    .map(|i| (i as f32 - 512.) / 1024.)
+                    .collect::<Vec<_>>(),
+                (16, 64),
+                &Device::Cpu,
+            )?,
+        );
+        rules.push(TensorRule {
+            prefix: name,
+            encoding: Some(Encoding::Nvfp4),
+            group_size: 16,
+        });
+    }
+    candle_core::safetensors::save(&weights, source.join("model.safetensors"))?;
+    drop(weights);
+    let dest = fixture.0.join("nvfp4.mnw");
+    let c = convert(
+        &source,
+        &dest,
+        &Conversion {
+            rules,
+            ..Conversion::default()
+        },
+    )?;
+    let copy = fixture.0.join("copy.mnw");
+    let copied = convert(&dest, &copy, &Conversion::default())?;
+    for (name, t) in &c.manifest.tensors {
+        if t.encoding != Encoding::Nvfp4 {
+            continue;
+        }
+        assert_eq!(t.group_size, 16);
+        assert!(t.global_scale.unwrap() > 0.);
+        assert_eq!(t.scales.as_ref().unwrap().bytes, 64);
+        assert_eq!(t.data.blake3, copied.manifest.tensors[name].data.blake3);
+        assert_eq!(t.global_scale, copied.manifest.tensors[name].global_scale);
+        assert_eq!(
+            t.scales.as_ref().unwrap().blake3,
+            copied.manifest.tensors[name]
+                .scales
+                .as_ref()
+                .unwrap()
+                .blake3
+        );
+        let mut invalid = t.clone();
+        invalid.global_scale = None;
+        assert!(invalid.validate().is_err());
+        invalid = t.clone();
+        invalid.global_scale = Some(f32::NAN);
+        assert!(invalid.validate().is_err());
+    }
+    assert!(
+        convert(
+            &dest,
+            &fixture.0.join("invalid.mnw"),
+            &Conversion {
+                expert_encoding: Some(Encoding::I8Mma),
+                ..Conversion::default()
+            }
+        )
+        .is_err()
     );
     Ok(())
 }

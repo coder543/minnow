@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--url', default='http://127.0.0.1:8083/upstream/llada-2.2-mini')
+    parser.add_argument('--url', default='http://127.0.0.1:8080')
     parser.add_argument('--report', type=Path, default=Path('artifacts/prefix-cache/api-cache.json'))
     args = parser.parse_args()
     records = []

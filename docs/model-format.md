@@ -41,28 +41,25 @@ each tensor's exact source bytes and mixed floating dtypes.
 | --- | --- | --- |
 | `bf16`, `f16`, `f32` | Standard floating-point bits | Original row-major storage |
 | `i8_sym` | Signed INT8, range -127…127 | FP16 scales, row-major |
-| `fp4_e2m1` | E2M1, low nibble first | FP16 scales, row-major |
 | `i8_mma` | Same INT8 codes | Tensor-core fragment order |
-| `fp4_mma` | Same E2M1 codes | Tensor-core fragment order |
+| `nvfp4` | E2M1 codes | E4M3/16 block scales, FP32 outer scale, native K64 fragment order |
 
-Groups run along the input dimension and may contain 16, 32, 64, or 128 weights.
-Defaults are INT8/128 and FP4/32. Each group uses an FP16 scale rounded from
-`max_abs/127` or `max_abs/6`. Zero groups use scale one. Codes are selected using
-the stored scale and nearest-even rounding. E2M1 magnitudes are
-`[0, 0.5, 1, 1.5, 2, 3, 4, 6]`; bit 3 is sign. This is a custom FP4 format,
-not NVFP4 or MXFP4 wire compatibility. Scales must be positive and finite.
+INT8 groups run along the input dimension and contain 16, 32, 64, or 128
+weights (default 128). Each group stores an FP16 scale rounded from
+`max_abs/127`; zero groups use one. Codes use the stored scale and nearest-even
+rounding. Scales must be positive and finite.
 
 Packed matrices require N divisible by 8 and K divisible by 16. For each N8/K16
 tile, lane `l` contains four codes at row `l/4`, columns
-`2*(l%4) + [0,1,8,9]`. They occupy four consecutive INT8 bytes or two FP4 bytes.
+`2*(l%4) + [0,1,8,9]`. They occupy four consecutive INT8 bytes.
 Tile order is `[N/8][K/16][lane]`. FP16 scales use `[N/8][K/group][8]` order.
 Packed experts concatenate directly without runtime repacking or expansion.
 This permutation changes no quantized value or scale.
 
 ## Conversion and mixed precision
 
-`convert OUTPUT --experts int8|fp4` defaults to the packed layout. Use
-`--quant-layout row` for the plain layout. `--experts original` preserves source
+`convert OUTPUT --experts int8|nvfp4` defaults to the packed layout. Use
+`--quant-layout row` for plain INT8 layout. `--experts original` preserves source
 precision/layout. A quantized input can be copied or losslessly repacked to the
 same codebook/group size; changing its precision requires the original source.
 For example, an earlier row-layout container can be repacked on local SSD:
@@ -88,14 +85,48 @@ their original dtype. The converter handles one expert at a time (limited to
 the output and publishes atomically without overwriting existing files. Original
 checkpoints are read-only inputs.
 
-CUDA's normal quantized path dequantizes directly into registers, converts
-operands to BF16, and uses FP32 tensor-core accumulators. No expanded model is
-stored in system/GPU RAM. A CPU fallback expands one selected expert for testing.
-Tests cover exact original bytes/metadata, missing external assets, checksum and
-truncation rejection, mixed-precision execution, lossless repacking, and GPU
-results against separately decoded BF16 operands.
+CUDA's INT8 path dequantizes into registers and uses BF16 tensor-core operands
+with FP32 accumulation. NVFP4 uses native FP4 tensor cores. Neither stores an
+expanded model in system/GPU RAM. CPU execution expands one selected expert for
+small-fixture tests. Shared experts, attention, routers, embeddings, and the
+output head retain source precision.
 
-INT8 was selected for the 3090 target rather than depending on native FP8
-instructions: Ampere provides BF16 and INT8 tensor cores. This W8A16 path uses
-the BF16 form after register dequantization, preserving BF16 activations.
-See NVIDIA's [Ampere tuning guide](https://docs.nvidia.com/cuda/ampere-tuning-guide/index.html).
+## Native NVFP4
+
+`nvfp4` uses NVIDIA's E2M1/E4M3 block-scaled arithmetic, with a minnow-specific
+fragment storage permutation. It is not a drop-in reader for other vendors'
+checkpoint files. Each expert matrix has a positive finite `global_scale` in
+the manifest. The stored value is `E2M1(code) * E4M3(block_scale) * global_scale`.
+Block scales occupy one byte per 16 weights (nonnegative finite E4M3 codes 0–126).
+The outer scale is `max_abs / (6 * 448)`, clamped to positive normal FP32;
+all-zero matrices use one. Block scales round `(block_max / 6) / global_scale`
+to nearest-even E4M3, with a minimum nonzero code for nonzero blocks. Codes round
+using the stored scales. Zero blocks use scale one. No calibration is required.
+
+Matrices require N divisible by 8 and K divisible by 64. Codes are packed as
+`[N/8][K/64][register=2][lane=32]` of little-endian u32 values. Lane `l` reads
+row `l/4`, columns `8*(l%4)+[0..7]`, then the same columns plus 32. Scales use
+`[N/8][K/64][row=8][group=4]` byte order. Experts concatenate directly; the loader
+streams into final U8 code/scale allocations and one small FP32 outer-scale
+vector. Copying an NVFP4 container preserves every code and scale exactly.
+Requantization and `--quant-layout row` are rejected for NVFP4 conversion.
+
+On SM120/121, activations use the same block scheme with a dynamic FP32 outer
+scale **per token**, so unrelated rows do not alter a token's quantization.
+Gate/up quantize each original token once and use routing indices to share it
+across expert assignments. Their input is never gathered into duplicated BF16
+rows. Specialized quantizers retain inputs in registers across the scale
+reduction. The down projection quantizes its own expert-specific input.
+The native `mma.sync...m16n8k64...e2m1...ue4m3` instruction consumes FP4 operands
+and E4M3 scales directly. FP32 accumulators are multiplied by both outer scales
+and rounded to BF16. No dequantized weights are written to memory. This path
+quantizes both weights and activations.
+
+The separate `compute_120f` PTX module requires CUDA 13 and SM120/121. There is
+no CUDA emulation fallback. CPU execution is an independent small-fixture oracle,
+not a production backend. GPU tests compare activation codes/scales exactly with
+the scalar encoder, then compare native MMA against independently dequantized
+operands, including uneven/repeated expert segments and all supported row tiles.
+
+References: [NVIDIA NVFP4 format](https://developer.nvidia.com/blog/introducing-nvfp4-for-efficient-and-accurate-low-precision-inference/)
+and [PTX MMA/block scaling](https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#warp-level-matrix-instructions-mma).

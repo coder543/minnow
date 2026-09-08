@@ -140,15 +140,15 @@ Checkpoint loading still uses bounded direct reads from local NVMe and no mmap.
 
 ```sh
 cargo build --release --features cuda
-cargo test --release --features cuda -- --include-ignored
+cargo test --release --features cuda -- --include-ignored --test-threads=1
 
 python3 scripts/memory_guard.py --report artifacts/decode-current-memory.json \
   --max-growth-gib 40 --reserve-gib 40 -- \
-  target/release/minnow decode-bench --cases tests/generation_cases.json --iterations 5
+  target/release/minnow --model models/mini-bf16.mnw decode-bench --cases tests/generation_cases.json --iterations 5
 
 python3 scripts/memory_guard.py --report artifacts/decode-prefix-memory.json \
   --max-growth-gib 40 --reserve-gib 40 -- \
-  target/release/minnow bench --input artifacts/decode-validation/forward-input.json \
+  target/release/minnow --model models/mini-bf16.mnw bench --input artifacts/decode-validation/forward-input.json \
   --cached-only --prefix-blocks 0,8,32,128,255 --iterations 10
 ```
 

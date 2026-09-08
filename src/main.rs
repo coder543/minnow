@@ -18,6 +18,7 @@ enum Precision {
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
+    /// Checkpoint directory or self-contained .mnw file (required).
     #[arg(long, global = true)]
     model: Option<PathBuf>,
     #[arg(long, global = true, default_value = "cuda")]
@@ -66,9 +67,9 @@ enum Command {
     Convert {
         output: PathBuf,
         /// Quantize routed expert projections; other weights retain their dtype.
-        #[arg(long, value_parser = ["original", "int8", "fp4"], default_value = "original")]
+        #[arg(long, value_parser = ["original", "int8", "nvfp4"], default_value = "original")]
         experts: String,
-        /// Quantization group size (default: 128 for INT8, 32 for FP4).
+        /// Quantization group size (default: 128 for INT8, 16 for NVFP4).
         #[arg(long, default_value_t = 0)]
         group_size: usize,
         /// CUDA fragment packing is lossless; row layout is available for comparisons.
@@ -231,10 +232,9 @@ async fn main() -> Result<()> {
         )
         .init();
     let cli = Cli::parse();
-    let model_path = cli.model.unwrap_or_else(|| {
-        PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-            .join("models/hf/inclusionAI/LLaDA2.2-mini")
-    });
+    let model_path = cli
+        .model
+        .context("pass --model with a checkpoint directory or .mnw file")?;
     match &cli.command {
         Command::Convert {
             output,
@@ -244,17 +244,17 @@ async fn main() -> Result<()> {
             tensor_rules,
         } => {
             use minnow::container::{Conversion, Encoding, convert};
+            anyhow::ensure!(
+                experts != "nvfp4" || quant_layout == "mma",
+                "NVFP4 requires its native MMA layout; --quant-layout row is unsupported"
+            );
             let options = Conversion {
                 expert_encoding: match experts.as_str() {
+                    "nvfp4" => Some(Encoding::Nvfp4),
                     "int8" => Some(if quant_layout == "mma" {
                         Encoding::I8Mma
                     } else {
                         Encoding::I8Sym
-                    }),
-                    "fp4" => Some(if quant_layout == "mma" {
-                        Encoding::Fp4Mma
-                    } else {
-                        Encoding::Fp4E2m1
                     }),
                     _ => None,
                 },

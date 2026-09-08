@@ -359,10 +359,27 @@ impl Moe {
                 token_ids.push((slot / c.num_experts_per_tok) as u32);
             }
         }
-        let selected = x.index_select(&Tensor::from_vec(token_ids, ids.len(), x.device())?, 0)?;
         if quantized {
-            let gate = self.packed[0].grouped(&selected, &segments)?;
-            let up = self.packed[1].grouped(&selected, &segments)?;
+            let evaluate_pair = || -> Result<(Tensor, Tensor)> {
+                #[cfg(feature = "cuda")]
+                if x.device().is_cuda()
+                    && let (ExpertProjection::Quantized(a), ExpertProjection::Quantized(b)) =
+                        (&self.packed[0], &self.packed[1])
+                    && a.encoding == crate::container::Encoding::Nvfp4
+                    && b.encoding == a.encoding
+                {
+                    return Ok(crate::cuda::nvfp4::grouped_pair_indexed(
+                        x, a, b, &segments, &token_ids,
+                    )?);
+                }
+                let selected =
+                    x.index_select(&Tensor::from_slice(&token_ids, ids.len(), x.device())?, 0)?;
+                Ok((
+                    self.packed[0].grouped(&selected, &segments)?,
+                    self.packed[1].grouped(&selected, &segments)?,
+                ))
+            };
+            let (gate, up) = evaluate_pair()?;
             let hidden = silu_mul(&gate, &up, fused)?;
             let output = self.packed[2].grouped(&hidden, &segments)?;
             let mut output = mix_experts(
@@ -377,6 +394,7 @@ impl Moe {
             }
             return Ok(output);
         }
+        let selected = x.index_select(&Tensor::from_vec(token_ids, ids.len(), x.device())?, 0)?;
         let evaluate_serial = || -> Result<Tensor> {
             let mut outputs = Vec::new();
             let mut row = 0;
@@ -620,6 +638,15 @@ impl Model {
     pub fn load(path: &Path, dtype: DType, device: &Device) -> Result<Self> {
         let c = Config::load(path)?;
         let loader = Arc::new(crate::weights::WeightLoader::open(path)?);
+        #[cfg(feature = "cuda")]
+        if device.is_cuda()
+            && loader
+                .inventory()
+                .iter()
+                .any(|(_, _, e)| *e == crate::container::Encoding::Nvfp4)
+        {
+            crate::cuda::nvfp4::check_device(device)?;
+        }
         ensure!(
             !device.is_cuda()
                 || dtype == DType::BF16

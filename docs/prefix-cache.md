@@ -122,9 +122,7 @@ NVIDIA documents mixed-precision reduction controls in its
 
 The FP32 diagnostic peaked at 66.54 GiB of memory growth (the more detailed
 activation trace used 70.03 GiB). The BF16 cache-storage regression used 32.39 GiB.
-All completed with zero new swap-out. The previous guard aborted on a few KiB of
-swap-out; the revised policy tolerates incidental activity and brief allocation
-stalls while retaining explicit memory budgets and sustained-pressure limits.
+All completed with zero new swap-out.
 
 The successful BF16 cold replay peaked at 34.31 GiB of system-memory growth,
 including model loading, and produced no new swap-out. Slot growth replaces one
@@ -133,12 +131,12 @@ Only one complete model weight set is resident, and loading uses direct reads
 from the local SSD without checkpoint mmap.
 
 ```sh
-cargo test --release --features cuda -- --include-ignored
+cargo test --release --features cuda -- --include-ignored --test-threads=1
 python3 scripts/memory_guard.py --report artifacts/cache-memory.json \
   --max-growth-gib 12 --reserve-gib 40 -- \
   python3 scripts/check_prefix_cache.py --url http://127.0.0.1:8080
 ```
 
 The HTTP check assumes an already resident server; use a 40 GiB growth ceiling
-if llama-swap must load it. Run full-model diagnostics sequentially with serving
+if the check also triggers loading through a proxy. Run full-model diagnostics sequentially with serving
 stopped and under the corresponding memory guard.

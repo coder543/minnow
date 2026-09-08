@@ -123,7 +123,7 @@ current source hashes are recorded in the JSON report.
 cargo build --release --features cuda
 python3 scripts/memory_guard.py --report artifacts/prefill-current-memory.json \
   --max-growth-gib 42 --reserve-gib 40 -- \
-  target/release/minnow prefill-bench --input artifacts/prefill-input.json \
+  target/release/minnow --model models/mini-bf16.mnw prefill-bench --input artifacts/prefill-input.json \
   --tokens 512,2048,4096,8192 --iterations 5
 
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/memory_guard.py \

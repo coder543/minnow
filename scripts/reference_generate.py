@@ -24,7 +24,7 @@ from weight_io import ModelLease, WeightReader, available_memory, RESERVE
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--model', type=Path, default=Path.home() / 'models/hf/inclusionAI/LLaDA2.2-mini')
+    p.add_argument('--model', type=Path, required=True)
     p.add_argument('--cases', type=Path, default=Path('tests/generation_cases.json'))
     p.add_argument('--output', type=Path, default=Path('artifacts/reference-generation.json'))
     p.add_argument('--prefill-input', type=Path, help='also time prompt-to-KV construction from these token IDs')

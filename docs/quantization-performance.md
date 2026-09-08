@@ -1,122 +1,93 @@
-# Quantized mini/flash measurements on GB10
+# Quantization performance
 
-Measured September 8, 2026 using local-SSD `.mnw` checkpoints, BF16 activations,
-FP32 accumulation, one resident model, and the default 4,096-token transformer
-prefill batch. INT8 uses 128-weight groups; FP4 uses 32-weight groups. Both use
-FP16 scales and the lossless tensor-core fragment layout. Only routed experts
-are quantized. See [format details](model-format.md) and [measurement data](quantization-performance.json).
+Measured September 8, 2026 on NVIDIA GB10 with CUDA 13, a release build, and
+one resident model at a time. Only routed experts are quantized. INT8 uses
+BF16 activations; NVFP4 uses native E2M1 matrix operands with E4M3 block scales
+and FP32 accumulation. Other layers retain source precision.
 
-Each case has a discarded warmup and three measured requests. Requests are
-sequential (`--parallel 1`) and disable prefix reuse. Generation is greedy with
-threshold 0.5, editing threshold 0, 16 maximum post-steps, normal EOS stopping,
-and a 2,048-token cap. Loading, tokenization, and admission are excluded from the
-reported inference rates. Decode includes all refinements and commit refreshes.
-The allocator may retain 2 GiB of unused scratch relative to live allocations.
+Each case discards one warmup and measures three sequential requests, with
+prefix reuse disabled. Prefill batches contain up to 4,096 tokens, attention
+tiles up to 1,024 queries, and allocator scratch retention is 2 GiB. Generation
+is greedy: threshold 0.5, editing threshold 0, 16 maximum post-steps, normal EOS,
+and a 2,048-token cap. Loading, tokenization, and admission are excluded.
+BF16/INT8 baselines are retained from the preceding build; NVFP4 uses the new
+kernels. [Measurement data](quantization-performance.json) records checkpoint
+identities, settings, repetitions, work counts, and memory observations.
+The [Nsight profile](nvfp4-profile.md) separates attention, native expert GEMMs,
+weight traffic, and dispatch costs, with priorities for further optimization.
 
 ## Cold prefill
 
-| Complete prompt tokens | Mini BF16 | Mini INT8 | Mini FP4 | Flash FP4 |
+| Prompt tokens | Mini BF16 | Mini INT8 | Mini NVFP4 | Flash NVFP4 |
 | ---: | ---: | ---: | ---: | ---: |
-| 512 | 4,345 | 4,991 | 5,650 | 1,120 |
-| 2,048 | 7,425 | 6,837 | 7,078 | 1,485 |
-| 4,096 | 7,762 | 6,539 | 6,646 | 1,495 |
-| 8,192 | 6,413 | 5,569 | 5,642 | 1,324 |
+| 512 | 4,345 | 4,991 | 9,108 | 1,840 |
+| 2048 | 7,425 | 6,837 | 11,420 | 2,795 |
+| 4096 | 7,762 | 6,539 | 10,291 | 2,765 |
+| 8192 | 6,413 | 5,569 | 7,972 | 2,237 |
 
-Values are tokens/s, computed as total prompt tokens divided by summed prefill
-time. All requests recompute the entire prompt. The input is the same committed
-benchmark token sequence for each model/precision. The quantized kernels improve
-512-token prefill, but at larger batches their dequantization/instruction cost
-outweighs the bandwidth reduction. Large-row quantized GEMM remains an optimization
-opportunity; weight-only quantization does not make every workload faster.
+Rates are total prompt tokens divided by summed prefill seconds. All requests
+recompute the complete prompt using the same benchmark token sequence.
 
 ## Useful decode
 
-| Prompt | Mini BF16 | Mini INT8 | Mini FP4 | Flash FP4 |
+| Prompt | Mini BF16 | Mini INT8 | Mini NVFP4 | Flash NVFP4 |
 | --- | ---: | ---: | ---: | ---: |
-| What is the LHC? | 41.9 | 60.3 | 71.2 | 19.4 |
-| Write a React TypeScript example | 113.7 | 266.4* | 184.1 | 59.1 |
-| Fellowship characters and backstories | 39.2 | 56.8 | 61.3 | 16.8 |
+| What is the LHC? | 41.9 | 60.3 | 92.2 | 22.3 |
+| React TypeScript example | 113.7 | 266.4 | 192.9 | 47.4 |
+| Fellowship characters/backstories | 39.2 | 56.8 | 83.0 | 22.0 |
 
-These are generated non-special tokens/s, not repeated predicted positions.
-The INT8 React response reached the 2,048-token cap (*); all other responses
-ended at EOS. Quantization changes the output and sometimes its difficulty, so
-these are workload measurements rather than identical-work kernel speedups.
+These are non-special generated tokens/s, including refinement and commit costs.
+They are not repeated predicted positions. Quantization changes the response
+and its refinement workload, so these are not identical-work speedups. The INT8
+React response reached the output cap; all NVFP4 responses stopped at EOS.
 
-| Prompt | Mini BF16 tokens / steps per block | Mini INT8 | Mini FP4 | Flash FP4 |
-| --- | ---: | ---: | ---: | ---: |
-| LHC | 293 / 20.30 | 192 / 18.00 | 193 / 18.43 | 368 / 14.33 |
-| React | 1,058 / 8.03 | 2,048 / 4.68 | 884 / 8.00 | 1,785 / 4.93 |
-| Fellowship | 750 / 22.52 | 813 / 20.74 | 959 / 24.06 | 820 / 16.26 |
-
-All measured repeats matched their same-configuration warmup text. That does
-not imply warm/cold-prefix or cross-batch bitwise invariance; see the separate
-[cache arithmetic investigation](prefix-cache.md).
-
-The user reports about **140 useful tokens/s for DiffusionGemma 26B A4B NVFP4**
-on this machine. Flash is substantially below that reference across these
-prompts. Mini exceeds it on this coding example but falls below it on both prose
-prompts. The DiffusionGemma run was not repeated here, and matching its prompts,
-sampling, precision, and stopping would be needed for a controlled comparison.
-Our custom FP4 storage and BF16 activations are not native NVFP4 execution.
-
-These prompts are throughput probes, not an accuracy benchmark. The outputs
-include factual errors and occasional repetition in the BF16 baseline as well
-as quantized runs. Tests establish implementation correctness against the
-stored/dequantized weights; they do not establish negligible quantization loss
-or equal answer quality. Full model quality evaluation remains necessary before
-choosing a deployment precision on accuracy grounds.
-
-## Kernel and memory checks
-
-For 48 experts with six assigned rows each, fragment packing reduced a mini
-INT8 gate/up GEMM from 0.428 to 0.275 ms and FP4 from 0.202 to 0.175 ms. Flash
-INT8 changed from 1.931 to 1.102 ms and FP4 from 0.921 to 0.780 ms. These calls
-include allocation and synchronization. They isolate a lossless layout change,
-without changing codes, scales, or arithmetic. The 32-row tile outperformed the
-64/128-row alternatives on the measured shapes and is the default.
-
-CUDA checks cover both layouts/bit widths, every supported scale-group size,
-uneven/repeated expert assignments, output-column and K-tile tails, and numerical
-agreement with independently dequantized BF16 operands. Container tests check
-mixed-precision execution and exact round-trip repacking. Runtime dequantization
-stays in registers; there is no expanded full-weight copy.
-
-| Model | Weight payload GiB | Peak system growth GiB in full benchmark |
+| NVFP4 response | Mini tokens / steps per block | Flash tokens / steps per block |
 | --- | ---: | ---: |
-| Mini BF16 | 30.28 | 34.21 |
-| Mini INT8 | 16.25 | 19.05 |
-| Mini FP4 | 9.79 | 12.40 |
-| Flash FP4 | 57.96 | 65.60 |
+| LHC | 352 / 18.50 | 316 / 16.27 |
+| React | 672 / 9.27 | 425 / 8.36 |
+| Fellowship | 750 / 21.08 | 842 / 17.39 |
 
-System growth includes loading, runtime, K/V, and temporary workspaces; it is
-measured relative to each unloaded baseline on GB10's shared RAM. Allocator
-history and other system allocations also affect it. All four runs completed
-within their explicit memory budgets with **zero new swap-out**. These are not
-full-context or RTX 3090 measurements. Mini INT8 is the sensible starting point
-for a 24 GiB card; its 16.25 GiB weights leave a limited budget for K/V and scratch.
+These prompts measure throughput, not answer quality. Both BF16 and quantized
+outputs contain factual errors and repetition; the mini NVFP4 React example
+also contains an undefined handler. Kernel/reference agreement does not establish
+negligible quantization loss. A representative quality evaluation remains needed.
 
-## Allocator allowance
+## Native kernel optimizations
 
-With `--workspace-cache-mib 0`, mini BF16 achieved 7,474 tok/s at 4K prefill and
-6,072 at 8K, versus 7,762 and 6,413 with the 2 GiB allowance. Decode changed by
-less than 2% on each prompt, and all three outputs matched exactly. This ablation
-used one warmup and two measured runs. Its peak system growth was 33.42 GiB
-versus 34.21 GiB for the baseline. The benefit is modest prefill improvement;
-the allowance is not responsible for the quantized decode gains.
+Both prefill and decode execute native block-scaled FP4 MMA. Disassembly confirms
+`OMMA.SF.16864.F32.E2M1.E2M1.UE4M3.4X`; there is no BF16 expansion of weights.
+Weights are stored directly in register-fragment order. Production uses 16- or
+32-row tiles selected from a 16/32/64/128 sweep. Specialized activation quantizers
+retain input pairs in registers across the scale reduction. Gate/up quantize each
+original token once and index it across expert assignments, eliminating repeated
+quantization and the duplicated BF16 input gather.
 
-## Reproduce
+That last optimization, together with quantizer/tile tuning, raised mini 4K
+prefill from 8,909 to 10,291 tok/s while preserving all three NVFP4 response texts
+and refinement counts. Decode gains from this tuning were small. Flash decode
+still requires many refinements; native FP4 acceleration alone does not remove
+that cost.
 
-```sh
-cargo build --release --features cuda
-python3 scripts/memory_guard.py --report artifacts/bench-mini-int8-memory.json \
-  --max-growth-gib 30 --reserve-gib 40 -- \
-  python3 scripts/bench_models.py \
-  --model ~/models/minnow/llada2.2-mini-int8-packed.mnw \
-  --report artifacts/bench-mini-int8.json
-```
+The synthetic benchmark uses 48 experts and includes quantization, allocation,
+and synchronization. At six rows per expert, mini gate/up takes 0.118 ms with
+NVFP4 versus 0.462 ms with BF16; at 128 rows, 0.374 versus 0.630 ms. Flash gate/up
+takes 0.574 versus 1.842 ms at six rows, and 1.198 versus 2.152 ms at 128 rows.
+These isolate projection work, not whole-response throughput.
 
-Run models sequentially. For flash, use the FP4 file and an appropriate explicit
-budget (the measured run allowed 78 GiB growth and retained 32 GiB system reserve).
-`--prefill-only`/`--decode-only` select parts of the suite. Full text and per-block
-records remain in local artifacts; committed JSON contains timings, work counts,
-container manifest identities, and the synthetic matrix measurements.
+## Memory and validation
+
+| NVFP4 model | Weight payload | Peak system-memory growth |
+| --- | ---: | ---: |
+| mini-nvfp4 | 9.79 GiB | 12.35 GiB |
+| flash-nvfp4 | 57.96 GiB | 63.26 GiB |
+
+Peak growth includes loading, K/V, activations, and workspaces relative to the
+unloaded system baseline. These are unified-memory observations, not discrete
+GPU VRAM measurements or full-context capacity tests.
+
+CUDA tests compare activation codes/scales exactly against a scalar encoder at
+all mini/flash projection widths. Native GEMM is checked against independently
+dequantized operands across uneven/repeated expert assignments and all row tiles.
+Quantizing before routing matches quantizing gathered rows exactly. Container
+checks cover scale metadata, checksums, lossless copying, and rejected
+requantization. See [reproduction commands](validation.md).

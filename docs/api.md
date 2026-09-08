@@ -8,7 +8,7 @@ API contract, committed-output parsing, and UI compatibility.
 ## Serving
 
 ```sh
-target/release/minnow serve --listen 127.0.0.1:8080 \
+target/release/minnow --model models/mini-bf16.mnw serve --listen 127.0.0.1:8080 \
   --alias minnow-llada2.2-mini \
   --ui-dir ../llama.cpp/build/tools/ui/dist \
   --threshold 0.5 --editing-threshold 0 --max-post-steps 16
@@ -34,7 +34,6 @@ a completed full-length performance or soak test.
 Defaults: parallel 4, queue 8, maximum output 256, greedy sampling, threshold 0.5,
 editing_threshold 0, max_post_steps 16, steps 32, max_steps_per_block 1000,
 top_k 0, top_p 1, seed 42. All decoding defaults have `serve --...` arguments.
-The llama-swap entry overrides maximum output to 2,048.
 
 ### Conversation prefix slots
 
@@ -188,7 +187,7 @@ generation speeds; custom refinement statistics remain available to API clients.
 | `minnow.refinement_steps_per_block` | Mean refinement steps per generated block. |
 | `minnow.processed_tokens` | All transformer input positions: prefill, refinements, and necessary commit refreshes. |
 | `minnow.commit_forwards`, `reused_commits` | Cache refreshes versus exact reuse after block finalization. |
-| `minnow.tokens_per_second` | Generated model IDs / total elapsed inference time, including prefill (legacy metric). |
+| `minnow.tokens_per_second` | Generated model IDs / total elapsed inference time, including prefill. |
 | `minnow.batch` | Current block: index, offset, finalized model-token count, refinement_steps, evaluated_tokens, elapsed_seconds, output and total-work rates. |
 | `minnow.batches` | All finalized block records, included at response completion. |
 
@@ -199,37 +198,9 @@ average of block rates. Request queuing is excluded from inference timings.
 
 ## Validation
 
-`cargo test --release --features cuda -- --include-ignored` covers numerical
-fixtures, progress and cancellation boundaries, incremental tool/stop parsing,
-request validation, overrides, and external asset serving.
-`scripts/check_compatibility.py` exercises the trained model over HTTP, including
-stream/plain equivalence, multi-block prefill, tool/result round trips, progress
-clearing, and disconnect cancellation. Run under `scripts/memory_guard.py`, with
-only one model process. `artifacts/check-minnow-ui.mjs` exercises the actual UI
-through llama-swap using the locally installed Playwright browser.
-
-Validated on GB10 with the unquantized BF16 checkpoint: 33 Rust tests (including
-CUDA checks), CPU/CUDA clippy, streamed/non-streamed tool equivalence, tool-result
-history, an 8,827-token prompt with 8,800 prefilled positions, and the actual
-llama-server UI through llama-swap. The browser also completed its built-in
-`get_datetime` tool round trip. All three configured model names routed without
-rewriting. Artifacts: `artifacts/minnow-swap-api.json`, `minnow-ui-check.json`, and
-`minnow-aliases.json`. The guarded API run peaked at 33.72 GiB above its unloaded
-system baseline, with no new swap-out; disconnect cancellation took about 54 ms.
-This validates the configured full limit and prompts beyond the old 8K cap, not a
-131,072-token soak run.
-
-The subsequent container/batching checks use one real mini BF16 weight set.
-`check_compatibility.py --spawn --model FILE.mnw` passed tools, prefill completion,
-and cancellation with 31.39 GiB peak system growth and zero swap-out.
-The final `check_batching.py --model FILE.mnw` run observed 499 sequence forwards
-in 416 GPU batches, with up to three sequences in a batch. It admitted a short
-request during a 1,024-token response (0.24 s HTTP latency), verified disconnect
-recovery, and peaked at 31.85 GiB system growth with zero swap-out. Artifacts are
-`artifacts/api-container-compatibility.json` and `artifacts/final-batching.json`.
-
-The updated llama-swap wrapper serves the original-precision container directly.
-Final HTTP checks through llama-swap pass cache forks/growth/LRU, full and partial
-hit accounting, tools, progress clearing, and cancellation. The current external
-UI also passes a browser `get_datetime` tool/result round trip. The refreshed
-minimal-load reservation remains 33 GiB (31.877 GiB measured system growth).
+`scripts/check_compatibility.py --spawn --model MODEL` exercises streaming/plain
+responses, multi-block prefill, tool/result round trips, progress clearing, and
+disconnect cancellation. `scripts/check_batching.py --model MODEL` checks
+concurrent requests, late admission, and cancellation recovery.
+`scripts/check_prefix_cache.py --url URL` checks forks, growth, eviction, and
+cache/progress accounting against a running server. See [validation](validation.md).

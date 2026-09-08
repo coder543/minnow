@@ -191,12 +191,12 @@ there between passes.
 cargo build --release --features cuda
 python3 scripts/memory_guard.py --report artifacts/natural-memory.json \
   --max-growth-gib 40 --reserve-gib 40 -- \
-  target/release/minnow decode-bench \
+  target/release/minnow --model models/mini-bf16.mnw decode-bench \
   --cases tests/decode_natural_cases.json --iterations 3
 
 python3 scripts/memory_guard.py --report artifacts/length-memory.json \
   --max-growth-gib 40 --reserve-gib 40 -- \
-  target/release/minnow decode-bench --iterations 3
+  target/release/minnow --model models/mini-bf16.mnw decode-bench --iterations 3
 ```
 
 These commands exercise the current conditional-commit implementation. The

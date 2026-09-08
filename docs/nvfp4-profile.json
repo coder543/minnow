@@ -1,0 +1,459 @@
+{
+  "date": "2026-09-08",
+  "model": "LLaDA2.2-mini NVFP4 routed experts; other weights BF16/F32",
+  "hardware": "NVIDIA GB10 SM12.1",
+  "tools": {
+    "Nsight Systems": "2025.3.2",
+    "Nsight Compute": "2025.3.1",
+    "CUDA": "13"
+  },
+  "source_sha256": {
+    "src/cuda/nvfp4.cu": "92437aa0796cf1fbd56cb618a12ff8fef555175440de7bb61f4c5df37a0b67d9",
+    "src/cuda/nvfp4.rs": "cfe277c65ff1b6bec070d52b47b311587ac975435c97d3c60a4788a0f6a56a46",
+    "src/model.rs": "75b73d8bddbdc9a2912605be2b86ac0e100f321b49555881aafd4d42281b4a89",
+    "examples/bench_nvfp4.rs": "4cc7a159343140b43e2e48957036b8347213fd1f9ed48ff0668c0681cdce8ba7"
+  },
+  "systems": {
+    "prefill4096": {
+      "kernels": 955,
+      "span_ms": 395.874944,
+      "gpu_busy_ms": 321.96336,
+      "gpu_busy_percent_span": 81.32956249941395,
+      "groups": {
+        "other": {
+          "calls": 620,
+          "gpu_ms": 108.19558400000001,
+          "percent_gpu_busy": 33.6049369095912
+        },
+        "attention_qk_av": {
+          "calls": 160,
+          "gpu_ms": 77.04960000000003,
+          "percent_gpu_busy": 23.931170304596158
+        },
+        "attention_softmax": {
+          "calls": 80,
+          "gpu_ms": 53.113152000000014,
+          "percent_gpu_busy": 16.49664483561111
+        },
+        "activation_quantization": {
+          "calls": 38,
+          "gpu_ms": 4.921088,
+          "percent_gpu_busy": 1.5284621206586986
+        },
+        "native_expert_gemm": {
+          "calls": 57,
+          "gpu_ms": 78.75791999999997,
+          "percent_gpu_busy": 24.461764841813043
+        }
+      },
+      "kernel_and_copy_busy_percent_span": 81.79503980972868,
+      "copies": {
+        "count": 277,
+        "sum_gpu_ms": 1.872416
+      }
+    },
+    "prefill8192": {
+      "kernels": 1910,
+      "span_ms": 1021.21184,
+      "gpu_busy_ms": 873.940288,
+      "gpu_busy_percent_span": 85.57874612969626,
+      "groups": {
+        "other": {
+          "calls": 1240,
+          "gpu_ms": 222.2835840000003,
+          "percent_gpu_busy": 25.43464205188356
+        },
+        "attention_qk_av": {
+          "calls": 320,
+          "gpu_ms": 279.96220800000003,
+          "percent_gpu_busy": 32.03447785210699
+        },
+        "attention_softmax": {
+          "calls": 160,
+          "gpu_ms": 201.61260800000008,
+          "percent_gpu_busy": 23.06938022749674
+        },
+        "activation_quantization": {
+          "calls": 76,
+          "gpu_ms": 9.809824,
+          "percent_gpu_busy": 1.122482180384388
+        },
+        "native_expert_gemm": {
+          "calls": 114,
+          "gpu_ms": 160.42191999999997,
+          "percent_gpu_busy": 18.35616485505243
+        }
+      },
+      "kernel_and_copy_busy_percent_span": 85.95157807267331,
+      "copies": {
+        "count": 554,
+        "sum_gpu_ms": 3.862688
+      }
+    },
+    "decode_lhc": {
+      "kernels": 127476,
+      "span_ms": 4105.451328,
+      "gpu_busy_ms": 3519.4844,
+      "gpu_busy_percent_span": 85.72710084263846,
+      "groups": {
+        "other": {
+          "calls": 101724,
+          "gpu_ms": 1114.5776479999677,
+          "percent_gpu_busy": 31.66877648328169
+        },
+        "attention_softmax": {
+          "calls": 4440,
+          "gpu_ms": 12.98486400000022,
+          "percent_gpu_busy": 0.36894222346887573
+        },
+        "activation_quantization": {
+          "calls": 8436,
+          "gpu_ms": 27.722336000000002,
+          "percent_gpu_busy": 0.7876817411095786
+        },
+        "native_expert_gemm": {
+          "calls": 12654,
+          "gpu_ms": 1734.8880320000032,
+          "percent_gpu_busy": 49.29381224136136
+        },
+        "vocabulary_head": {
+          "calls": 222,
+          "gpu_ms": 637.8355839999999,
+          "percent_gpu_busy": 18.122983696134582
+        }
+      },
+      "kernel_and_copy_busy_percent_span": 86.4437638742054,
+      "copies": {
+        "count": 30429,
+        "sum_gpu_ms": 29.467424
+      }
+    }
+  },
+  "compute_prefill4096": {
+    "csv": "nvfp4-ncu-prefill-range.csv",
+    "metrics": {
+      "gpu__time_duration.sum": {
+        "value": 412.290112,
+        "unit": "ms"
+      },
+      "lts__d_sectors_fill_sysmem.sum": {
+        "value": 1015901658.0,
+        "unit": "sector"
+      },
+      "lts__t_sectors_op_read.sum": {
+        "value": 6086602981.0,
+        "unit": "sector"
+      },
+      "lts__throughput.avg.pct_of_peak_sustained_elapsed": {
+        "value": 26.606914,
+        "unit": "%"
+      },
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+        "value": 10.454563,
+        "unit": "%"
+      },
+      "sm__throughput.avg.pct_of_peak_sustained_elapsed": {
+        "value": 18.574608,
+        "unit": "%"
+      }
+    },
+    "system_fill_bytes": 32508853056.0,
+    "system_fill_GB_per_second": 78.84946087671392,
+    "kernel": "range",
+    "grid": [
+      98304,
+      2172,
+      7
+    ]
+  },
+  "compute_micro": {
+    "gate-decode": {
+      "csv": "nvfp4-ncu-micro-gate-decode.csv",
+      "metrics": {
+        "gpu__time_duration.sum": {
+          "value": 164.928,
+          "unit": "us"
+        },
+        "lts__d_sectors_fill_sysmem.sum": {
+          "value": 896244.0,
+          "unit": "sector"
+        },
+        "lts__t_sectors_op_read.sum": {
+          "value": 972249.0,
+          "unit": "sector"
+        },
+        "lts__t_sector_hit_rate.pct": {
+          "value": 9.144652,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 1.977018,
+          "unit": "%"
+        },
+        "sm__warps_active.avg.pct_of_peak_sustained_active": {
+          "value": 63.193893,
+          "unit": "%"
+        },
+        "smsp__issue_active.avg.pct_of_peak_sustained_active": {
+          "value": 5.077481,
+          "unit": "%"
+        },
+        "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+          "value": 98.219378,
+          "unit": "%"
+        },
+        "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+          "value": 0.268672,
+          "unit": "%"
+        }
+      },
+      "system_fill_bytes": 28679808.0,
+      "system_fill_GB_per_second": 173.8928987194412,
+      "kernel": "minnow_nvfp4_gemm_16",
+      "grid": [
+        8,
+        48,
+        1
+      ],
+      "experts": 48,
+      "rows_per_expert": 6,
+      "out": 512,
+      "input": 2048,
+      "cache_control": "all",
+      "replay": "kernel",
+      "minimum_unique_read_bytes": 28645248
+    },
+    "down-decode": {
+      "csv": "nvfp4-ncu-micro-down-decode.csv",
+      "metrics": {
+        "gpu__time_duration.sum": {
+          "value": 145.216,
+          "unit": "us"
+        },
+        "lts__d_sectors_fill_sysmem.sum": {
+          "value": 888949.0,
+          "unit": "sector"
+        },
+        "lts__t_sectors_op_read.sum": {
+          "value": 956667.0,
+          "unit": "sector"
+        },
+        "lts__t_sector_hit_rate.pct": {
+          "value": 12.055147,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 2.228997,
+          "unit": "%"
+        },
+        "sm__warps_active.avg.pct_of_peak_sustained_active": {
+          "value": 68.048085,
+          "unit": "%"
+        },
+        "smsp__issue_active.avg.pct_of_peak_sustained_active": {
+          "value": 6.32307,
+          "unit": "%"
+        },
+        "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+          "value": 94.961339,
+          "unit": "%"
+        },
+        "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+          "value": 1.116114,
+          "unit": "%"
+        }
+      },
+      "system_fill_bytes": 28446368.0,
+      "system_fill_GB_per_second": 195.8900396650507,
+      "kernel": "minnow_nvfp4_gemm_16",
+      "grid": [
+        32,
+        48,
+        1
+      ],
+      "experts": 48,
+      "rows_per_expert": 6,
+      "out": 2048,
+      "input": 512,
+      "cache_control": "all",
+      "replay": "kernel",
+      "minimum_unique_read_bytes": 28396416
+    },
+    "gate-prefill": {
+      "csv": "nvfp4-ncu-micro-gate-prefill.csv",
+      "metrics": {
+        "gpu__time_duration.sum": {
+          "value": 344.064,
+          "unit": "us"
+        },
+        "lts__d_sectors_fill_sysmem.sum": {
+          "value": 1115157.0,
+          "unit": "sector"
+        },
+        "lts__t_sectors_op_read.sum": {
+          "value": 8434284.0,
+          "unit": "sector"
+        },
+        "lts__t_sector_hit_rate.pct": {
+          "value": 85.346921,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 7.674748,
+          "unit": "%"
+        },
+        "sm__warps_active.avg.pct_of_peak_sustained_active": {
+          "value": 72.91184,
+          "unit": "%"
+        },
+        "smsp__issue_active.avg.pct_of_peak_sustained_active": {
+          "value": 17.202806,
+          "unit": "%"
+        },
+        "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+          "value": 80.717314,
+          "unit": "%"
+        },
+        "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+          "value": 0.31882,
+          "unit": "%"
+        }
+      },
+      "system_fill_bytes": 35685024.0,
+      "system_fill_GB_per_second": 103.71623883928571,
+      "kernel": "minnow_nvfp4_gemm_16",
+      "grid": [
+        8,
+        384,
+        1
+      ],
+      "experts": 48,
+      "rows_per_expert": 128,
+      "out": 512,
+      "input": 2048,
+      "cache_control": "all",
+      "replay": "kernel",
+      "minimum_unique_read_bytes": 35418816
+    },
+    "down-prefill": {
+      "csv": "nvfp4-ncu-micro-down-prefill.csv",
+      "metrics": {
+        "gpu__time_duration.sum": {
+          "value": 399.648,
+          "unit": "us"
+        },
+        "lts__d_sectors_fill_sysmem.sum": {
+          "value": 943913.0,
+          "unit": "sector"
+        },
+        "lts__t_sectors_op_read.sum": {
+          "value": 4601569.0,
+          "unit": "sector"
+        },
+        "lts__t_sector_hit_rate.pct": {
+          "value": 77.120082,
+          "unit": "%"
+        },
+        "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+          "value": 6.538278,
+          "unit": "%"
+        },
+        "sm__warps_active.avg.pct_of_peak_sustained_active": {
+          "value": 65.497732,
+          "unit": "%"
+        },
+        "smsp__issue_active.avg.pct_of_peak_sustained_active": {
+          "value": 15.803681,
+          "unit": "%"
+        },
+        "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+          "value": 84.268616,
+          "unit": "%"
+        },
+        "smsp__warp_issue_stalled_short_scoreboard_per_warp_active.pct": {
+          "value": 0.324733,
+          "unit": "%"
+        }
+      },
+      "system_fill_bytes": 30205216.0,
+      "system_fill_GB_per_second": 75.57955000400352,
+      "kernel": "minnow_nvfp4_gemm_32",
+      "grid": [
+        32,
+        192,
+        1
+      ],
+      "experts": 48,
+      "rows_per_expert": 128,
+      "out": 2048,
+      "input": 512,
+      "cache_control": "all",
+      "replay": "kernel",
+      "minimum_unique_read_bytes": 30108096
+    }
+  },
+  "compute_head": {
+    "csv": "nvfp4-ncu-head.csv",
+    "shape": {
+      "rows": 32,
+      "hidden": 2048,
+      "vocabulary": 157184
+    },
+    "kernel": "void Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_32x32_128x1_tn_align8>(Params)",
+    "grid": [
+      8,
+      614,
+      1
+    ],
+    "metrics": {
+      "gpu__time_duration.sum": {
+        "value": 2.876864,
+        "unit": "ms"
+      },
+      "lts__d_sectors_fill_sysmem.sum": {
+        "value": 20142704.0,
+        "unit": "sector"
+      },
+      "lts__t_sectors_op_read.sum": {
+        "value": 39446616.0,
+        "unit": "sector"
+      },
+      "lts__t_sector_hit_rate.pct": {
+        "value": 49.411166,
+        "unit": "%"
+      },
+      "sm__pipe_tensor_cycles_active.avg.pct_of_peak_sustained_elapsed": {
+        "value": 5.75229,
+        "unit": "%"
+      },
+      "sm__warps_active.avg.pct_of_peak_sustained_active": {
+        "value": 41.311748,
+        "unit": "%"
+      },
+      "smsp__issue_active.avg.pct_of_peak_sustained_active": {
+        "value": 3.055469,
+        "unit": "%"
+      },
+      "smsp__warp_issue_stalled_long_scoreboard_per_warp_active.pct": {
+        "value": 65.737431,
+        "unit": "%"
+      }
+    },
+    "system_fill_bytes": 644566528.0,
+    "system_fill_GB_per_second": 224.05178972659118,
+    "minimum_unique_read_bytes": 643956736,
+    "cache_control": "all",
+    "replay": "kernel"
+  },
+  "limitations": [
+    "Single Nsight Systems capture per phase; percentages use GPU kernel time, not wall time.",
+    "Decode capture contains a short prompt and 222 refinement forwards for the full LHC response; normal EOS, no prefix reuse.",
+    "Full decode app-range hardware-counter replay stalled and was terminated; no whole-decode bandwidth or utilization counters are reported.",
+    "Prefill counters use application-range replay without cache flushing; synthetic kernel counters flush cache between passes.",
+    "Synthetic NVFP4 fixtures use 48 experts with uniform row counts and gathered activations; real prefill routes irregularly across 256 experts and quantizes gate/up activations before routing.",
+    "Tensor-pipe active cycles are not percent of peak FLOP throughput.",
+    "System-memory L2 fills include all input data, not just weights; they exclude output write bandwidth.",
+    "Kernel gaps include host work, synchronization and profiler overhead; CPU API wait times overlap GPU execution.",
+    "This profile covers mini, not flash or long-context decode."
+  ]
+}

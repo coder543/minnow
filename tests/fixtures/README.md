@@ -5,7 +5,7 @@ trained model. Source hashes and library versions are in `metadata.json`.
 Regenerate with:
 
 ```sh
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python scripts/reference.py --output artifacts/tiny
+python3 scripts/reference.py --model models/LLaDA2.2-mini --output artifacts/tiny
 ```
 
 The fixture preserves block routing, dense and MoE layers, shared experts,

@@ -35,13 +35,8 @@ fn main() -> anyhow::Result<()> {
             .collect();
         let baseline =
             Tensor::from_slice(&values, (experts, out, input), &dev)?.to_dtype(DType::BF16)?;
-        for encoding in [
-            Encoding::I8Sym,
-            Encoding::Fp4E2m1,
-            Encoding::I8Mma,
-            Encoding::Fp4Mma,
-        ] {
-            let group_size = if encoding.int8() { 128 } else { 32 };
+        for encoding in [Encoding::I8Sym, Encoding::I8Mma] {
+            let group_size = 128;
             let (codes, scales) = encode_matrix(&values, encoding, group_size, input)?;
             let scales: Vec<f16> = scales
                 .as_chunks::<2>()
@@ -50,6 +45,7 @@ fn main() -> anyhow::Result<()> {
                 .map(|b| f16::from_bits(u16::from_le_bytes(*b)))
                 .collect();
             let weight = Weights {
+                global_scales: None,
                 codes: Tensor::from_vec(codes.clone(), codes.len(), &dev)?,
                 scales: Tensor::from_vec(scales.clone(), scales.len(), &dev)?,
                 encoding,

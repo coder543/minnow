@@ -52,15 +52,19 @@ impl Conversion {
             if group == 0 {
                 group = if original_group > 0 {
                     original_group
-                } else if encoding.int8() {
-                    128
+                } else if encoding == Encoding::Nvfp4 {
+                    16
                 } else {
-                    32
+                    128
                 };
             }
             ensure!(
                 [16, 32, 64, 128].contains(&group),
                 "unsupported group size {group}"
+            );
+            ensure!(
+                encoding != Encoding::Nvfp4 || group == 16,
+                "NVFP4 requires groups of 16"
             );
         } else {
             ensure!(
@@ -239,6 +243,12 @@ pub fn convert(source: &Path, destination: &Path, options: &Conversion) -> Resul
                 "packed matrix {name} requires N8/K16 alignment"
             );
         }
+        if selected == Encoding::Nvfp4 {
+            ensure!(
+                shape[0].is_multiple_of(8) && shape[1].is_multiple_of(64),
+                "NVFP4 requires N8/K64 alignment: {name}"
+            );
+        }
         ensure!(
             group == 0 || shape.last().is_some_and(|n| n.is_multiple_of(group)),
             "group size does not divide {name}"
@@ -275,6 +285,7 @@ pub fn convert(source: &Path, destination: &Path, options: &Conversion) -> Resul
         let offset = writer.align()?;
         let mut hash = blake3::Hasher::new();
         let mut scales = Vec::new();
+        let mut global_scale = None;
         if encoding.quantized() {
             // One expert at a time, bounded above before opening the output.
             let mut bytes = Vec::new();
@@ -282,7 +293,21 @@ pub fn convert(source: &Path, destination: &Path, options: &Conversion) -> Resul
                 bytes.extend_from_slice(input);
                 Ok(())
             })?;
-            let (codes, converted_scales) = if original.quantized() {
+            let (codes, converted_scales) = if encoding == Encoding::Nvfp4 {
+                if *original == Encoding::Nvfp4 {
+                    global_scale = loader.global_scale(name)?;
+                    loader.visit_scales(name, |input| {
+                        scales.extend_from_slice(input);
+                        Ok(())
+                    })?;
+                    (bytes, scales)
+                } else {
+                    let values = crate::quant::decode_float_bytes(&bytes, *original)?;
+                    let (codes, scales, global) = crate::quant::nvfp4::encode(&values)?;
+                    global_scale = Some(global);
+                    crate::quant::nvfp4::pack(&codes, &scales, shape[1], false)?
+                }
+            } else if original.quantized() {
                 loader.visit_scales(name, |input| {
                     scales.extend_from_slice(input);
                     Ok(())
@@ -324,6 +349,7 @@ pub fn convert(source: &Path, destination: &Path, options: &Conversion) -> Resul
             data,
             scales,
             group_size,
+            global_scale,
         };
         tensor.validate()?;
         manifest.tensors.insert(name.clone(), tensor);

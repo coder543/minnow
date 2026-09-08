@@ -1,10 +1,9 @@
 # minnow implementation notes
 
-Targets: LLaDA2.2-mini and LLaDA2.2-flash, with BF16 or mixed quantized experts,
-on NVIDIA GB10. Rust runtime
-with Candle; Python is used only for independent reference validation. The model
-checkout at `~/hf/inclusionAI/LLaDA2.2-mini` is read-only. The default working
-copy is `~/models/hf/inclusionAI/LLaDA2.2-mini`, on the local SSD.
+Minnow implements LLaDA2.2-mini and LLaDA2.2-flash in Rust with Candle and
+custom CUDA kernels. Supported weight formats are BF16, INT8, and NVFP4, with
+mixed precision by expert layer/projection. Python is used only for independent
+reference validation.
 
 ## Execution invariants
 
@@ -27,25 +26,10 @@ copy is `~/models/hf/inclusionAI/LLaDA2.2-mini`, on the local SSD.
 - Keep one resident weight set across requests. A bounded LRU pool retains
   independent conversation K/V slots; reuse requires exact complete token blocks.
 
-## Work and verification
+## CUDA execution
 
-1. Implement model/config/checkpoint loading, block attention, partial RoPE,
-   FP32 routing, dense/shared/routed SwiGLU, and explicit cache commit.
-2. Validate against fixtures produced by the checkpoint's actual Python classes:
-   small FP32 model, intermediate outputs, cache equivalence, decoding edge cases.
-3. Load one real BF16 checkpoint on CUDA, compare stored reference logits and generated
-   text, measure latency and processed-token counts.
-4. Provide CLI generation and a bounded HTTP inference worker, health/model
-   endpoints, and text chat/completion endpoints with the checkpoint template.
-5. Profile and improve material bottlenecks; record reproducible measurements.
-
-Future work includes FlashAttention, native low-bit activation/tensor-core paths,
-RTX 3090 hardware validation, and Responses API/session resumption.
-
-See [memory ownership](memory.md): no file-backed mmap, no complete host/CUDA
-weight duplication, no concurrent full-model validation. Use direct I/O and the
-one-layer reference script. The full FP32 Transformers loading path was removed
-after it exhausted system memory; do not reintroduce it.
+The runtime streams checkpoints into one resident weight set, shared across
+requests. See [memory ownership](memory.md) and [validation](validation.md).
 
 Current CUDA execution uses pointer-batched expert GEMMs for a single block and
 variable-size grouped GEMMs for prefill, with BF16 weights and FP32 accumulation.
@@ -97,8 +81,9 @@ configurable bounded amount of scratch across the decoder's synchronizations.
 
 The [self-contained format](model-format.md) stores aligned original or quantized
 payloads and a checksummed MessagePack manifest. Quantized expert GEMMs use
-BF16 tensor-core operands and FP32 accumulation, with code/scale dequantization
-in registers. Optional lossless fragment packing makes weight loads coalesced.
+BF16 tensor-core operands for INT8 or native block-scaled FP4 operands for
+NVFP4, with FP32 accumulation. INT8 dequantizes in registers; NVFP4 quantizes
+activation rows dynamically and shares the gate/up input. Optional lossless fragment packing makes weight loads coalesced.
 Mixed layer/projection precision shares the same expert gather/mix pipeline.
 Shared experts, attention, routers, embeddings, and the head retain source precision.
 

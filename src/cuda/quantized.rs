@@ -1,4 +1,4 @@
-//! Grouped W8A16/W4A16 tensor-core GEMM. Expanded weights live only in a
+//! Grouped W8A16 tensor-core GEMM. Expanded weights live only in a
 //! register file (or shared tiles in the diagnostic WMMA path), never global storage.
 use crate::quant::Weights;
 use candle_core::cuda_backend::{
@@ -38,9 +38,9 @@ impl CustomOp3 for Gemm<'_> {
     ) -> Result<(CudaStorage, Shape)> {
         let (experts, out, input) = self.weight.shape;
         let (rows, k) = xl.shape().dims2()?;
-        let divisor = if self.weight.encoding.int8() { 1 } else { 2 };
+        let divisor = 1;
         let group = self.weight.group_size;
-        if !self.weight.encoding.quantized()
+        if !self.weight.encoding.int8()
             || !xl.is_contiguous()
             || !wl.is_contiguous()
             || !sl.is_contiguous()
@@ -111,7 +111,7 @@ impl CustomOp3 for Gemm<'_> {
         let descriptors = stream.clone_htod(&descriptors).w()?;
         // SAFETY: descriptors cover all rows exactly, and the kernel bounds N.
         let mut output = unsafe { dev.alloc::<bf16>(rows * out)? };
-        let bits = if self.weight.encoding.int8() { 8 } else { 4 };
+        let bits = 8;
         let name = if wmma {
             format!("minnow_quant_gemm_{bits}")
         } else if self.weight.encoding.packed() {
@@ -174,12 +174,7 @@ mod tests {
         let dev = Device::new_cuda(0)?;
         // Uneven expert rows, repeated expert IDs, N tail, K tile tail, and
         // all scale-group sizes exercise layout and padding independently.
-        for encoding in [
-            Encoding::I8Sym,
-            Encoding::Fp4E2m1,
-            Encoding::I8Mma,
-            Encoding::Fp4Mma,
-        ] {
+        for encoding in [Encoding::I8Sym, Encoding::I8Mma] {
             for group_size in [16, 32, 64, 128] {
                 let (experts, out, input) = (3, 80, if group_size == 16 { 48 } else { 128 });
                 let values: Vec<f32> = (0..experts * out * input)
@@ -211,6 +206,7 @@ mod tests {
                 )?
                 .to_dtype(DType::BF16)?;
                 let w = Weights {
+                    global_scales: None,
                     codes: Tensor::from_vec(codes.clone(), codes.len(), &dev)?,
                     scales: Tensor::from_vec(scales.clone(), scales.len(), &dev)?,
                     encoding,
@@ -262,6 +258,7 @@ mod tests {
                         codes.len(),
                     )?;
                     let odd_w = Weights {
+                        global_scales: None,
                         codes,
                         scales: w.scales.clone(),
                         encoding,

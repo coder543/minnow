@@ -94,10 +94,10 @@ Build and test each target before copying its binary, using the same source:
 
 ```sh
 mkdir -p artifacts
-MINNOW_CUDA_ARCH=compute_80 cargo test --release --features cuda -- --include-ignored
+MINNOW_CUDA_ARCH=compute_80 cargo test --release --features cuda -- --include-ignored --test-threads=1
 MINNOW_CUDA_ARCH=compute_80 cargo build --release --features cuda
 cp target/release/minnow artifacts/minnow-compute80
-MINNOW_CUDA_ARCH=compute_121 cargo test --release --features cuda -- --include-ignored
+MINNOW_CUDA_ARCH=compute_121 cargo test --release --features cuda -- --include-ignored --test-threads=1
 MINNOW_CUDA_ARCH=compute_121 cargo build --release --features cuda
 cp target/release/minnow artifacts/minnow-compute121
 ```

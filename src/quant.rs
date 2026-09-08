@@ -1,8 +1,9 @@
-//! Weight-only encodings. Activations and tensor-core operands remain BF16.
+//! Expert quantization: INT8 weight-only and native NVFP4 weight/activation formats.
 use crate::container::Encoding;
 use anyhow::{Context, Result, bail, ensure};
 use candle_core::{DType, Tensor};
 use half::{bf16, f16};
+pub mod nvfp4;
 
 pub struct Weights {
     pub codes: Tensor,
@@ -10,19 +11,26 @@ pub struct Weights {
     pub encoding: Encoding,
     pub group_size: usize,
     pub shape: (usize, usize, usize),
+    pub global_scales: Option<Tensor>,
 }
 impl Weights {
     pub fn grouped(&self, x: &Tensor, segments: &[(usize, usize)]) -> Result<Tensor> {
         #[cfg(feature = "cuda")]
         if x.device().is_cuda() {
+            if self.encoding == Encoding::Nvfp4 {
+                return Ok(crate::cuda::nvfp4::grouped(x, self, segments)?);
+            }
             return Ok(crate::cuda::quantized::grouped(x, self, segments)?);
+        }
+        if self.encoding == Encoding::Nvfp4 {
+            return nvfp4::cpu_grouped(x, self, segments);
         }
         // CPU fallback expands one selected expert, never a whole model. This
         // path is an oracle/small-fixture fallback, not the CUDA serving path.
         let mut outputs = Vec::new();
         let (_, out, input) = self.shape;
         let elements = out * input;
-        let bytes = elements / if self.encoding.int8() { 1 } else { 2 };
+        let bytes = elements;
         let scale_count = elements / self.group_size;
         let mut row = 0;
         for &(e, n) in segments {
@@ -52,8 +60,6 @@ impl Weights {
         Ok(Tensor::cat(&outputs, 0)?)
     }
 }
-
-pub const FP4: [f32; 8] = [0., 0.5, 1., 1.5, 2., 3., 4., 6.];
 
 pub fn encode_parallel(
     values: &[f32],
@@ -112,8 +118,7 @@ pub fn decode_float_bytes(bytes: &[u8], encoding: Encoding) -> Result<Vec<f32>> 
 }
 pub fn encode(values: &[f32], encoding: Encoding, group: usize) -> Result<(Vec<u8>, Vec<u8>)> {
     ensure!(
-        encoding.quantized()
-            && !encoding.packed()
+        encoding == Encoding::I8Sym
             && [16, 32, 64, 128].contains(&group)
             && values.len().is_multiple_of(group),
         "invalid quantization shape/encoding"
@@ -122,23 +127,14 @@ pub fn encode(values: &[f32], encoding: Encoding, group: usize) -> Result<(Vec<u
         values.iter().all(|v| v.is_finite()),
         "cannot quantize nonfinite weights"
     );
-    let mut codes = Vec::with_capacity(if encoding == Encoding::I8Sym {
-        values.len()
-    } else {
-        values.len() / 2
-    });
+    let mut codes = Vec::with_capacity(values.len());
     let mut scales = Vec::with_capacity(values.len() / group * 2);
     for values in values.chunks_exact(group) {
         let maximum = values.iter().map(|v| v.abs()).fold(0., f32::max);
-        let range = if encoding == Encoding::I8Sym {
-            127.
-        } else {
-            6.
-        };
         let scale = if maximum == 0. {
             f16::ONE
         } else {
-            f16::from_f32((maximum / range).max(f16::from_bits(1).to_f32()))
+            f16::from_f32((maximum / 127.).max(f16::from_bits(1).to_f32()))
         };
         ensure!(
             scale.is_finite() && scale.to_f32() > 0.,
@@ -146,49 +142,21 @@ pub fn encode(values: &[f32], encoding: Encoding, group: usize) -> Result<(Vec<u
         );
         scales.extend_from_slice(&scale.to_bits().to_le_bytes());
         let scale = scale.to_f32();
-        if encoding == Encoding::I8Sym {
-            codes.extend(
-                values
-                    .iter()
-                    .map(|v| (v / scale).round_ties_even().clamp(-127., 127.) as i8 as u8),
-            );
-        } else {
-            for pair in values.as_chunks::<2>().0.iter() {
-                let nibble = |v: f32| {
-                    let a = (v / scale).abs();
-                    // Midpoints implement nearest-even E2M1 rounding directly.
-                    let index = if a <= 0.25 {
-                        0
-                    } else if a < 0.75 {
-                        1
-                    } else if a <= 1.25 {
-                        2
-                    } else if a < 1.75 {
-                        3
-                    } else if a <= 2.5 {
-                        4
-                    } else if a < 3.5 {
-                        5
-                    } else if a <= 5.0 {
-                        6
-                    } else {
-                        7
-                    };
-                    index as u8 | if v.is_sign_negative() { 8 } else { 0 }
-                };
-                codes.push(nibble(pair[0]) | nibble(pair[1]) << 4);
-            }
-        }
+        codes.extend(
+            values
+                .iter()
+                .map(|v| (v / scale).round_ties_even().clamp(-127., 127.) as i8 as u8),
+        );
     }
     Ok((codes, scales))
 }
 
 pub fn decode(codes: &[u8], scales: &[u8], encoding: Encoding, group: usize) -> Result<Vec<f32>> {
     ensure!(
-        encoding.quantized() && !encoding.packed() && [16, 32, 64, 128].contains(&group),
+        encoding == Encoding::I8Sym && [16, 32, 64, 128].contains(&group),
         "invalid quantized encoding/group"
     );
-    let count = codes.len() * if encoding == Encoding::I8Sym { 1 } else { 2 };
+    let count = codes.len();
     ensure!(
         count.is_multiple_of(group) && scales.len() == count / group * 2,
         "invalid quantized payload length"
@@ -198,12 +166,7 @@ pub fn decode(codes: &[u8], scales: &[u8], encoding: Encoding, group: usize) -> 
             let s = i / group * 2;
             let scale = f16::from_bits(u16::from_le_bytes([scales[s], scales[s + 1]])).to_f32();
             ensure!(scale.is_finite() && scale > 0., "invalid quantized scale");
-            let value = if encoding == Encoding::I8Sym {
-                codes[i] as i8 as f32
-            } else {
-                let nibble = (codes[i / 2] >> (i % 2 * 4)) & 15;
-                FP4[(nibble & 7) as usize] * if nibble & 8 == 0 { 1. } else { -1. }
-            };
+            let value = codes[i] as i8 as f32;
             Ok(value * scale)
         })
         .collect()
@@ -221,13 +184,10 @@ pub fn repack(
     input: usize,
 ) -> Result<(Vec<u8>, Vec<u8>)> {
     ensure!(
-        from.quantized() && to.quantized() && from.row_major() == to.row_major(),
+        from.int8() && to.int8(),
         "repacking must preserve the quantized codebook"
     );
-    let count = codes
-        .len()
-        .checked_mul(if from.int8() { 1 } else { 2 })
-        .context("code size overflow")?;
+    let count = codes.len();
     ensure!(
         [16, 32, 64, 128].contains(&group)
             && input > 0
@@ -246,14 +206,14 @@ pub fn repack(
     );
     let mut next_codes = vec![0; codes.len()];
     let mut next_scales = vec![0; scales.len()];
-    let bytes = if from.int8() { 4 } else { 2 };
+    let bytes = 4;
     for n in (0..out).step_by(8) {
         for k in (0..input).step_by(16) {
             for lane in 0..32 {
                 let packed = ((n / 8 * (input / 16) + k / 16) * 32 + lane) * bytes;
                 let row = (n + lane / 4) * input + k + (lane % 4) * 2;
                 for pair in 0..2 {
-                    let row_byte = (row + pair * 8) / if from.int8() { 1 } else { 2 };
+                    let row_byte = row + pair * 8;
                     let width = bytes / 2;
                     let packed_byte = packed + pair * width;
                     let (source, dest) = if to.packed() {
@@ -322,7 +282,7 @@ mod tests {
     use super::*;
     #[test]
     fn fragment_repacking_preserves_every_code_and_scale() -> Result<()> {
-        for packed in [Encoding::I8Mma, Encoding::Fp4Mma] {
+        for packed in [Encoding::I8Mma] {
             for group in [16, 32, 64, 128] {
                 let input = 256;
                 let values: Vec<f32> = (0..24 * input)
@@ -339,16 +299,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn encodings_preserve_exact_codebook_values_and_bound_int8_error() -> Result<()> {
-        let values: Vec<f32> = FP4
-            .iter()
-            .chain(FP4.iter())
-            .enumerate()
-            .map(|(i, v)| if i < 8 { *v } else { -v })
-            .collect();
-        let (codes, scales) = encode(&values, Encoding::Fp4E2m1, 16)?;
-        assert_eq!(codes, vec![0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe]);
-        assert_eq!(decode(&codes, &scales, Encoding::Fp4E2m1, 16)?, values);
+    fn int8_quantization_bounds_error() -> Result<()> {
         let values: Vec<f32> = (0..512)
             .map(|i| ((i * 31 % 257) as f32 - 128.) / 100.)
             .collect();

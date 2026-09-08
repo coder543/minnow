@@ -121,7 +121,7 @@ def run(args):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
-    p.add_argument('--model', type=Path, default=Path.home() / 'models/hf/inclusionAI/LLaDA2.2-mini')
+    p.add_argument('--model', type=Path, required=True)
     p.add_argument('--output', type=Path, default=Path('artifacts/mini-layerwise'))
     p.add_argument('--input', type=Path)
     p.add_argument('--code-model', type=Path, help='reference class source, when validating a tiny fixture')

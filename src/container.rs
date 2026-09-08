@@ -25,30 +25,24 @@ pub enum Encoding {
     F32,
     /// Signed symmetric INT8, FP16 scales along the innermost dimension.
     I8Sym,
-    /// E2M1 values, low nibble first, FP16 block scales (not NVFP4 wire format).
-    Fp4E2m1,
     /// INT8 in m16n8k16 tensor-core fragment order, with tiled FP16 scales.
     I8Mma,
-    /// E2M1 in m16n8k16 tensor-core fragment order, with tiled FP16 scales.
-    Fp4Mma,
+    /// Native NVFP4: E2M1, E4M3 scales per 16, FP32 scale per expert matrix.
+    Nvfp4,
 }
 impl Encoding {
     pub fn quantized(self) -> bool {
-        matches!(
-            self,
-            Self::I8Sym | Self::Fp4E2m1 | Self::I8Mma | Self::Fp4Mma
-        )
+        matches!(self, Self::I8Sym | Self::I8Mma | Self::Nvfp4)
     }
     pub fn int8(self) -> bool {
         matches!(self, Self::I8Sym | Self::I8Mma)
     }
     pub fn packed(self) -> bool {
-        matches!(self, Self::I8Mma | Self::Fp4Mma)
+        matches!(self, Self::I8Mma)
     }
     pub fn row_major(self) -> Self {
         match self {
             Self::I8Mma => Self::I8Sym,
-            Self::Fp4Mma => Self::Fp4E2m1,
             other => other,
         }
     }
@@ -85,6 +79,8 @@ pub struct TensorInfo {
     pub scales: Option<Region>,
     #[serde(default)]
     pub group_size: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub global_scale: Option<f32>,
 }
 impl TensorInfo {
     pub fn elements(&self) -> Result<usize> {
@@ -103,7 +99,7 @@ impl TensorInfo {
             Encoding::Bf16 | Encoding::F16 => n.checked_mul(2),
             Encoding::F32 => n.checked_mul(4),
             Encoding::I8Sym | Encoding::I8Mma => Some(n),
-            Encoding::Fp4E2m1 | Encoding::Fp4Mma => Some(n.div_ceil(2)),
+            Encoding::Nvfp4 => Some(n.div_ceil(2)),
         }
         .context("tensor byte size overflow")?;
         ensure!(
@@ -111,6 +107,19 @@ impl TensorInfo {
             "tensor payload length disagrees with shape/encoding"
         );
         if self.encoding.quantized() {
+            let native = self.encoding == Encoding::Nvfp4;
+            ensure!(
+                if native {
+                    self.shape.len() == 2
+                        && self.shape[0].is_multiple_of(8)
+                        && self.shape[1].is_multiple_of(64)
+                        && self.group_size == 16
+                        && self.global_scale.is_some_and(|v| v.is_finite() && v > 0.)
+                } else {
+                    self.global_scale.is_none()
+                },
+                "invalid NVFP4 shape or global scale"
+            );
             if self.encoding.packed() {
                 ensure!(
                     self.shape.len() == 2
@@ -125,14 +134,14 @@ impl TensorInfo {
                 "invalid quantization group size"
             );
             ensure!(
-                self.scales
-                    .as_ref()
-                    .is_some_and(|s| s.bytes == (n / self.group_size * 2) as u64),
-                "invalid FP16 scale payload"
+                self.scales.as_ref().is_some_and(
+                    |s| s.bytes == (n / self.group_size * if native { 1 } else { 2 }) as u64
+                ),
+                "invalid quantization scale payload"
             );
         } else {
             ensure!(
-                self.scales.is_none() && self.group_size == 0,
+                self.scales.is_none() && self.group_size == 0 && self.global_scale.is_none(),
                 "floating tensor has quantization metadata"
             );
         }

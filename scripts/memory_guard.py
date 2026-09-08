@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run one validation command with a system-memory floor and record its peak.
 
-This monitors total system available memory, including GB10 shared GPU memory,
+This monitors total system available memory, including shared GPU memory,
 because process RSS and nvidia-smi do not account for that allocation reliably.
 Small swap-out events are tolerated; sustained reclaim pressure is not.
 """

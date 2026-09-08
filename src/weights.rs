@@ -74,6 +74,7 @@ struct Location {
     checksum: Option<String>,
     scales: Option<Region>,
     group_size: usize,
+    global_scale: Option<f32>,
 }
 
 // O_DIRECT needs alignment that Vec<u8> does not guarantee. This is an ordinary
@@ -243,6 +244,7 @@ impl WeightLoader {
                                 checksum: None,
                                 scales: None,
                                 group_size: 0,
+                                global_scale: None,
                             }
                         )
                         .is_none(),
@@ -281,6 +283,7 @@ impl WeightLoader {
                     checksum: Some(info.data.blake3.clone()),
                     scales: info.scales.clone(),
                     group_size: info.group_size,
+                    global_scale: info.global_scale,
                 },
             );
         }
@@ -361,6 +364,13 @@ impl WeightLoader {
     }
     pub fn quantization_group(&self, name: &str) -> Result<usize> {
         Ok(self.tensors.get(name).context("missing tensor")?.group_size)
+    }
+    pub fn global_scale(&self, name: &str) -> Result<Option<f32>> {
+        Ok(self
+            .tensors
+            .get(name)
+            .context("missing tensor")?
+            .global_scale)
     }
     /// Bounded traversal of the separate scale region, including its checksum.
     pub fn visit_scales(&self, name: &str, consume: impl FnMut(&[u8]) -> Result<()>) -> Result<()> {
@@ -461,7 +471,21 @@ impl WeightLoader {
             DType::U8,
             device,
         )?;
-        let scales = Tensor::zeros(count / group_size, DType::F16, device)?;
+        let native = encoding == Encoding::Nvfp4;
+        let scale_dtype = if native { DType::U8 } else { DType::F16 };
+        let globals = if native {
+            Some(Tensor::from_vec(
+                parts
+                    .iter()
+                    .map(|p| p.global_scale.context("missing NVFP4 global scale"))
+                    .collect::<Result<Vec<_>>>()?,
+                shape.0,
+                device,
+            )?)
+        } else {
+            None
+        };
+        let scales = Tensor::zeros(count / group_size, scale_dtype, device)?;
         let mut code_offset = 0;
         let mut scale_offset = 0;
         for part in parts {
@@ -485,17 +509,25 @@ impl WeightLoader {
             };
             self.visit(name, &scale_location, |bytes| {
                 // Reject corrupt but checksummed scales before a kernel can use them.
-                for value in bytes.as_chunks::<2>().0.iter() {
-                    let value = half::f16::from_bits(u16::from_le_bytes(*value));
+                if native {
                     ensure!(
-                        value.is_finite() && value.to_f32() > 0.,
-                        "invalid scale in {name}"
+                        bytes.iter().all(|s| *s < 127),
+                        "invalid NVFP4 scale in {name}"
                     );
+                } else {
+                    for value in bytes.as_chunks::<2>().0.iter() {
+                        let value = half::f16::from_bits(u16::from_le_bytes(*value));
+                        ensure!(
+                            value.is_finite() && value.to_f32() > 0.,
+                            "invalid scale in {name}"
+                        );
+                    }
                 }
-                let chunk = Tensor::from_raw_buffer(bytes, DType::F16, &[bytes.len() / 2], device)?;
+                let n = bytes.len() / scale_dtype.size_in_bytes();
+                let chunk = Tensor::from_raw_buffer(bytes, scale_dtype, &[n], device)?;
                 scales.slice_set(&chunk, 0, scale_offset)?;
                 device.synchronize()?;
-                scale_offset += bytes.len() / 2;
+                scale_offset += n;
                 Ok(())
             })?;
         }
@@ -509,6 +541,7 @@ impl WeightLoader {
             encoding,
             group_size,
             shape,
+            global_scales: globals,
         }))
     }
     fn load(&self, name: &str, shape: Shape, dtype: DType, device: &Device) -> Result<Tensor> {

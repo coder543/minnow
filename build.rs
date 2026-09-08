@@ -23,4 +23,19 @@ fn main() {
         .status()
         .expect("nvcc is required when building with --features cuda");
     assert!(status.success(), "compiling minnow CUDA kernels failed");
+    // Native block-scaled FP4 is separate from portable BF16 PTX. SM120f
+    // supports SM120/121; the runtime checks capability before loading weights.
+    let status = Command::new(env::var_os("NVCC").unwrap_or_else(|| "nvcc".into()))
+        .args([
+            "-ptx",
+            "-arch=compute_120f",
+            "-O3",
+            "--fmad=false",
+            "src/cuda/nvfp4.cu",
+            "-o",
+        ])
+        .arg(output.join("minnow-nvfp4.ptx"))
+        .status()
+        .expect("nvcc is required");
+    assert!(status.success(), "compiling native NVFP4 kernels failed");
 }
