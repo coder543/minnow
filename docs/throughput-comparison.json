@@ -1,0 +1,818 @@
+{
+  "device": "NVIDIA GB10",
+  "dtype": "BF16",
+  "prefill_input_sha256": "fe1a1a9121c92213fae79aa643987950040d4ea58d52f0f747faee64376c0a2b",
+  "prefill": [
+    {
+      "prompt_tokens": 512,
+      "minnow": {
+        "dtype": "BF16",
+        "iterations": 5,
+        "max_chunk_tokens": 128,
+        "mean_seconds": 0.5220700624,
+        "prompt_tokens": 512,
+        "seconds": [
+          0.517560879,
+          0.525004542,
+          0.519649276,
+          0.531359509,
+          0.516776106
+        ],
+        "tokens_per_second": 980.7112816358267,
+        "warmups": 2
+      },
+      "transformers_eager": {
+        "prompt_tokens": 512,
+        "iterations": 5,
+        "warmups": 2,
+        "seconds": [
+          0.20234638400143012,
+          0.20304430898977444,
+          0.21065258100861683,
+          0.20247315301094204,
+          0.20178716402733698
+        ],
+        "mean_seconds": 0.2040607182076201,
+        "tokens_per_second": 2509.0571301384393,
+        "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+      },
+      "transformers_sdpa": {
+        "prompt_tokens": 512,
+        "iterations": 5,
+        "warmups": 2,
+        "seconds": [
+          0.19707945903064683,
+          0.19706957100424916,
+          0.20365317998221144,
+          0.19546628097305074,
+          0.19694846600759774
+        ],
+        "mean_seconds": 0.19804339139955118,
+        "tokens_per_second": 2585.292023034707,
+        "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+      },
+      "sdpa_speedup_over_minnow": 2.636139780835843
+    },
+    {
+      "prompt_tokens": 2048,
+      "minnow": {
+        "dtype": "BF16",
+        "iterations": 5,
+        "max_chunk_tokens": 128,
+        "mean_seconds": 2.1354854614,
+        "prompt_tokens": 2048,
+        "seconds": [
+          2.131250167,
+          2.131447479,
+          2.134553065,
+          2.141691957,
+          2.138484639
+        ],
+        "tokens_per_second": 959.0325183751681,
+        "warmups": 2
+      },
+      "transformers_eager": {
+        "prompt_tokens": 2048,
+        "iterations": 5,
+        "warmups": 2,
+        "seconds": [
+          0.567315524967853,
+          0.5618585619959049,
+          0.5670074590016156,
+          0.5603530009975657,
+          0.5621511879726313
+        ],
+        "mean_seconds": 0.5637371469871141,
+        "tokens_per_second": 3632.898791476683,
+        "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+      },
+      "transformers_sdpa": {
+        "prompt_tokens": 2048,
+        "iterations": 5,
+        "warmups": 2,
+        "seconds": [
+          0.3843602789565921,
+          0.37957866600481793,
+          0.392844668996986,
+          0.37970986700383946,
+          0.393019566021394
+        ],
+        "mean_seconds": 0.3859026093967259,
+        "tokens_per_second": 5307.038486217025,
+        "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+      },
+      "sdpa_speedup_over_minnow": 5.533741958206407
+    },
+    {
+      "prompt_tokens": 4096,
+      "minnow": {
+        "dtype": "BF16",
+        "iterations": 5,
+        "max_chunk_tokens": 128,
+        "mean_seconds": 4.6704986532,
+        "prompt_tokens": 4096,
+        "seconds": [
+          4.677026369,
+          4.666823034,
+          4.669289651,
+          4.678808727,
+          4.660545485
+        ],
+        "tokens_per_second": 876.9941507623856,
+        "warmups": 2
+      },
+      "transformers_eager": {
+        "prompt_tokens": 4096,
+        "iterations": 5,
+        "warmups": 2,
+        "seconds": [
+          1.3940180480130948,
+          1.3871942759724334,
+          1.3819143220316619,
+          1.391468750021886,
+          1.3937816750258207
+        ],
+        "mean_seconds": 1.3896754142129795,
+        "tokens_per_second": 2947.450863782968,
+        "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+      },
+      "transformers_sdpa": {
+        "prompt_tokens": 4096,
+        "iterations": 5,
+        "warmups": 2,
+        "seconds": [
+          0.7125117260147817,
+          0.7072859340114519,
+          0.7137310460093431,
+          0.71758055803366,
+          0.7062822789885104
+        ],
+        "mean_seconds": 0.7114783086115495,
+        "tokens_per_second": 5757.027235297373,
+        "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+      },
+      "sdpa_speedup_over_minnow": 6.564499010959986
+    }
+  ],
+  "generation_sdpa_comparison": [
+    {
+      "case": "arithmetic",
+      "prompt_tokens": 25,
+      "minnow_output_tokens": 96,
+      "transformers_output_tokens": 96,
+      "minnow_total_seconds": 0.981842297,
+      "minnow_prefill_seconds": 0.000548214,
+      "transformers_total_seconds": 1.8339142040349543,
+      "minnow_useful_tokens_per_second": 97.77537624252503,
+      "transformers_useful_tokens_per_second": 52.34705079920426,
+      "minnow_decode_only_tokens_per_second": 97.82999985744335,
+      "text_equal": false,
+      "minnow_speedup": 1.8678297010002964
+    },
+    {
+      "case": "factual",
+      "prompt_tokens": 21,
+      "minnow_output_tokens": 9,
+      "transformers_output_tokens": 9,
+      "minnow_total_seconds": 0.095194298,
+      "minnow_prefill_seconds": 0.000438565,
+      "transformers_total_seconds": 0.12210189999314025,
+      "minnow_useful_tokens_per_second": 94.54347780368106,
+      "transformers_useful_tokens_per_second": 73.70892672845898,
+      "minnow_decode_only_tokens_per_second": 94.98106040718402,
+      "text_equal": true,
+      "minnow_speedup": 1.2826598079765266
+    },
+    {
+      "case": "code",
+      "prompt_tokens": 29,
+      "minnow_output_tokens": 28,
+      "transformers_output_tokens": 28,
+      "minnow_total_seconds": 0.322416144,
+      "minnow_prefill_seconds": 0.000472086,
+      "transformers_total_seconds": 0.4568436440313235,
+      "minnow_useful_tokens_per_second": 86.84428655656895,
+      "transformers_useful_tokens_per_second": 61.290116138904146,
+      "minnow_decode_only_tokens_per_second": 86.97163157457622,
+      "text_equal": true,
+      "minnow_speedup": 1.4169378690644083
+    },
+    {
+      "case": "longer_prompt",
+      "prompt_tokens": 72,
+      "minnow_output_tokens": 128,
+      "transformers_output_tokens": 128,
+      "minnow_total_seconds": 2.621297291,
+      "minnow_prefill_seconds": 0.119356139,
+      "transformers_total_seconds": 8.262880802038126,
+      "minnow_useful_tokens_per_second": 48.83078330698203,
+      "transformers_useful_tokens_per_second": 15.49096532633358,
+      "minnow_decode_only_tokens_per_second": 51.160276051129124,
+      "text_equal": false,
+      "minnow_speedup": 3.152210483873012
+    }
+  ],
+  "generation_metric": "final returned tokens including EOS / total generation seconds, including prompt computation and every denoising/commit forward; excludes loading/tokenization",
+  "generation_timing_note": "Single warm smoke runs; minnow figures from the previous server validation; reference SDPA newly measured. Not a task-quality benchmark.",
+  "optimized_prefill": [
+    {
+      "prompt_tokens": 512,
+      "minnow": {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 5,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.13236587260000002,
+        "prompt_tokens": 512,
+        "seconds": [
+          0.131656997,
+          0.133330026,
+          0.131803605,
+          0.132902249,
+          0.132136486
+        ],
+        "tokens_per_second": 3868.0665185294893,
+        "warmups": 2
+      },
+      "original_minnow": {
+        "dtype": "BF16",
+        "iterations": 5,
+        "max_chunk_tokens": 128,
+        "mean_seconds": 0.5220700624,
+        "prompt_tokens": 512,
+        "seconds": [
+          0.517560879,
+          0.525004542,
+          0.519649276,
+          0.531359509,
+          0.516776106
+        ],
+        "tokens_per_second": 980.7112816358267,
+        "warmups": 2
+      },
+      "transformers_sdpa": {
+        "prompt_tokens": 512,
+        "iterations": 5,
+        "warmups": 2,
+        "seconds": [
+          0.20790548401419073,
+          0.19818760000634938,
+          0.20076635299483314,
+          0.20043083297787234,
+          0.19831177801825106
+        ],
+        "mean_seconds": 0.20112040960229932,
+        "tokens_per_second": 2545.7386498587684,
+        "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+      },
+      "speedup_over_original": 3.9441440013594553,
+      "speedup_over_sdpa": 1.5194279737804508,
+      "minnow_seconds_stddev": 0.0007225923995852013
+    },
+    {
+      "prompt_tokens": 2048,
+      "minnow": {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 5,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.33382789339999996,
+        "prompt_tokens": 2048,
+        "seconds": [
+          0.330961739,
+          0.33907647,
+          0.32882559,
+          0.329154951,
+          0.341120717
+        ],
+        "tokens_per_second": 6134.89777364422,
+        "warmups": 2
+      },
+      "original_minnow": {
+        "dtype": "BF16",
+        "iterations": 5,
+        "max_chunk_tokens": 128,
+        "mean_seconds": 2.1354854614,
+        "prompt_tokens": 2048,
+        "seconds": [
+          2.131250167,
+          2.131447479,
+          2.134553065,
+          2.141691957,
+          2.138484639
+        ],
+        "tokens_per_second": 959.0325183751681,
+        "warmups": 2
+      },
+      "transformers_sdpa": {
+        "prompt_tokens": 2048,
+        "iterations": 5,
+        "warmups": 2,
+        "seconds": [
+          0.3817283009993844,
+          0.3925702359993011,
+          0.38204908900661394,
+          0.39490529301110655,
+          0.3880039070500061
+        ],
+        "mean_seconds": 0.3878513652132824,
+        "tokens_per_second": 5280.373317427385,
+        "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+      },
+      "speedup_over_original": 6.396965333394756,
+      "speedup_over_sdpa": 1.1618303110116392,
+      "minnow_seconds_stddev": 0.005826815240995591
+    },
+    {
+      "prompt_tokens": 4096,
+      "minnow": {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "forwards": 1,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 5,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 0.6582836102,
+        "prompt_tokens": 4096,
+        "seconds": [
+          0.65511297,
+          0.660655996,
+          0.659506283,
+          0.65608069,
+          0.660062112
+        ],
+        "tokens_per_second": 6222.242110441655,
+        "warmups": 2
+      },
+      "original_minnow": {
+        "dtype": "BF16",
+        "iterations": 5,
+        "max_chunk_tokens": 128,
+        "mean_seconds": 4.6704986532,
+        "prompt_tokens": 4096,
+        "seconds": [
+          4.677026369,
+          4.666823034,
+          4.669289651,
+          4.678808727,
+          4.660545485
+        ],
+        "tokens_per_second": 876.9941507623856,
+        "warmups": 2
+      },
+      "transformers_sdpa": {
+        "prompt_tokens": 4096,
+        "iterations": 5,
+        "warmups": 2,
+        "seconds": [
+          0.7102147800032981,
+          0.7184761419775896,
+          0.7073679890017956,
+          0.7141358189983293,
+          0.7184359339880757
+        ],
+        "mean_seconds": 0.7137261327938177,
+        "tokens_per_second": 5738.895931926398,
+        "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+      },
+      "speedup_over_original": 7.094964208179218,
+      "speedup_over_sdpa": 1.0842228512676673,
+      "minnow_seconds_stddev": 0.0025095830578967045
+    },
+    {
+      "prompt_tokens": 8192,
+      "minnow": {
+        "attention_chunk_tokens": 1024,
+        "batched_experts": true,
+        "dtype": "BF16",
+        "forwards": 2,
+        "fused_attention": true,
+        "fused_expert_mix": true,
+        "iterations": 5,
+        "max_chunk_tokens": 4096,
+        "mean_seconds": 1.5436235512,
+        "prompt_tokens": 8192,
+        "seconds": [
+          1.5449540819999998,
+          1.544761882,
+          1.5311118320000001,
+          1.5465926250000002,
+          1.550697335
+        ],
+        "tokens_per_second": 5306.993401099386,
+        "warmups": 2
+      },
+      "original_minnow": null,
+      "transformers_sdpa": {
+        "prompt_tokens": 8192,
+        "iterations": 5,
+        "warmups": 2,
+        "seconds": [
+          1.4578120329533704,
+          1.4524121540016495,
+          1.4535471349954605,
+          1.4586139720049687,
+          1.449868762982078
+        ],
+        "mean_seconds": 1.4544508113875054,
+        "tokens_per_second": 5632.366482153536,
+        "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+      },
+      "speedup_over_original": null,
+      "speedup_over_sdpa": 0.9422315500802171,
+      "minnow_seconds_stddev": 0.007390247679181864
+    }
+  ],
+  "optimized_smoke_generation": {
+    "health": {
+      "max_context": 4096,
+      "model": "minnow-llada2.2-mini",
+      "queued_requests": 0,
+      "status": "ok"
+    },
+    "results": [
+      {
+        "name": "arithmetic",
+        "text_equal": true,
+        "text": "Let's calculate the expression step by step:\n\nExpression:  \n$$\n1 + 5 - 28 \\times 0.5 - 200\n$$\n\nStep 1: Perform the multiplication first  \n$$\n28 \\times 0.5 = 14\n$$\n\nNow substitute:\n$$\n1 + 5 - 14 - 200\n$$\n\nStep 2: Perform",
+        "reference_text": "Let's calculate the expression step by step:\n\nExpression:  \n$$\n1 + 5 - 28 \\times 0.5 - 200\n$$\n\nStep 1: Perform the multiplication first  \n$$\n28 \\times 0.5 = 14\n$$\n\nNow substitute:\n$$\n1 + 5 - 14 - 200\n$$\n\nStep 2: Perform",
+        "http_seconds": 0.9258236390305683,
+        "reference_seconds": 1.8339142040349543,
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "length",
+              "index": 0,
+              "message": {
+                "content": "Let's calculate the expression step by step:\n\nExpression:  \n$$\n1 + 5 - 28 \\times 0.5 - 200\n$$\n\nStep 1: Perform the multiplication first  \n$$\n28 \\times 0.5 = 14\n$$\n\nNow substitute:\n$$\n1 + 5 - 14 - 200\n$$\n\nStep 2: Perform",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1788836379,
+          "id": "minnow-2",
+          "minnow": {
+            "blocks": 4,
+            "completion_tokens": 96,
+            "denoise_forwards": 19,
+            "elapsed_seconds": 0.923857235,
+            "prefill_seconds": 2.9488e-05,
+            "processed_tokens": 704,
+            "prompt_tokens": 25,
+            "tokens_per_second": 103.91215911190001,
+            "total_forwards": 22
+          },
+          "model": "minnow-llada2.2-mini",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 96,
+            "prompt_tokens": 25,
+            "total_tokens": 121
+          }
+        }
+      },
+      {
+        "name": "factual",
+        "text_equal": true,
+        "text": "The capital of France is Paris.",
+        "reference_text": "The capital of France is Paris.",
+        "http_seconds": 0.0907682019751519,
+        "reference_seconds": 0.12210189999314025,
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "The capital of France is Paris.",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1788836379,
+          "id": "minnow-3",
+          "minnow": {
+            "blocks": 1,
+            "completion_tokens": 9,
+            "denoise_forwards": 2,
+            "elapsed_seconds": 0.08878943,
+            "prefill_seconds": 2.6064e-05,
+            "processed_tokens": 64,
+            "prompt_tokens": 21,
+            "tokens_per_second": 101.36341679409362,
+            "total_forwards": 2
+          },
+          "model": "minnow-llada2.2-mini",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 9,
+            "prompt_tokens": 21,
+            "total_tokens": 30
+          }
+        }
+      },
+      {
+        "name": "code",
+        "text_equal": true,
+        "text": "def sum_even_numbers(numbers):\n    return sum(num for num in numbers if num % 2 == 0)",
+        "reference_text": "def sum_even_numbers(numbers):\n    return sum(num for num in numbers if num % 2 == 0)",
+        "http_seconds": 0.303707773971837,
+        "reference_seconds": 0.4568436440313235,
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": {
+                "content": "def sum_even_numbers(numbers):\n    return sum(num for num in numbers if num % 2 == 0)",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1788836380,
+          "id": "minnow-4",
+          "minnow": {
+            "blocks": 2,
+            "completion_tokens": 28,
+            "denoise_forwards": 6,
+            "elapsed_seconds": 0.30177033,
+            "prefill_seconds": 2.6256e-05,
+            "processed_tokens": 224,
+            "prompt_tokens": 29,
+            "tokens_per_second": 92.78579507799856,
+            "total_forwards": 7
+          },
+          "model": "minnow-llada2.2-mini",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 28,
+            "prompt_tokens": 29,
+            "total_tokens": 57
+          }
+        }
+      },
+      {
+        "name": "longer_prompt",
+        "text_equal": false,
+        "text": "When we draw a ball **with replacement**, it means that after the first draw, we put it back into the box before drawing the second ball. This ensures that the composition of the box remains unchanged between the two draws.\n\n### Effect of Replacement on Independence:\n- Since the first ball is replaced, the outcome of the first draw does **not** affect the probabilities of the second draw.\n- Therefore, the two draws are **independent events**.\n\n---\n\n### Total Number of Balls:\n- Red: 3  \n- Blue: 4  \n- Green: 5  \n- **",
+        "reference_text": "When we draw a ball from the box, **replace** it, and then draw a second ball, the outcome of the first draw does **not affect** the outcome of the second draw. This is because the ball is returned to the box, so the total number of balls and the composition of the box remain unchanged between the two draws.\n\n### Effect of Replacement on Independence:\n\n- **Replacement** means that the draw of the first ball is **independent** of the draw of the second ball.\n- Therefore, the two draws are **independent events**.\n\n### Probability that Both Balls are Red:\n\n",
+        "http_seconds": 2.4348808039794676,
+        "reference_seconds": 8.262880802038126,
+        "response": {
+          "choices": [
+            {
+              "finish_reason": "length",
+              "index": 0,
+              "message": {
+                "content": "When we draw a ball **with replacement**, it means that after the first draw, we put it back into the box before drawing the second ball. This ensures that the composition of the box remains unchanged between the two draws.\n\n### Effect of Replacement on Independence:\n- Since the first ball is replaced, the outcome of the first draw does **not** affect the probabilities of the second draw.\n- Therefore, the two draws are **independent events**.\n\n---\n\n### Total Number of Balls:\n- Red: 3  \n- Blue: 4  \n- Green: 5  \n- **",
+                "role": "assistant"
+              }
+            }
+          ],
+          "created": 1788836382,
+          "id": "minnow-5",
+          "minnow": {
+            "blocks": 5,
+            "completion_tokens": 128,
+            "denoise_forwards": 52,
+            "elapsed_seconds": 2.432626864,
+            "prefill_seconds": 0.067334107,
+            "processed_tokens": 1856,
+            "prompt_tokens": 72,
+            "tokens_per_second": 52.618016307494,
+            "total_forwards": 57
+          },
+          "model": "minnow-llada2.2-mini",
+          "object": "chat.completion",
+          "usage": {
+            "completion_tokens": 128,
+            "prompt_tokens": 72,
+            "total_tokens": 200
+          }
+        }
+      }
+    ]
+  },
+  "prefill_optimization_validation": {
+    "baseline_vs_reference": {
+      "logits": {
+        "max_abs_error": 1.71875,
+        "rms_error": 0.21723149716854095,
+        "relative_rms_error": 0.05140004679560661,
+        "top1_matches": 30,
+        "tokens": 32,
+        "mean_kl_from_reference": 0.008192785084247589
+      },
+      "normalized": {
+        "max_abs_error": 2.875,
+        "rms_error": 0.15689215064048767,
+        "relative_rms_error": 0.056701287627220154
+      },
+      "router_set_agreement": 0.7006578947368421
+    },
+    "optimized_vs_reference": {
+      "logits": {
+        "max_abs_error": 1.25,
+        "rms_error": 0.1888355314731598,
+        "relative_rms_error": 0.044681161642074585,
+        "top1_matches": 30,
+        "tokens": 32,
+        "mean_kl_from_reference": 0.005917183123528957
+      },
+      "normalized": {
+        "max_abs_error": 2.25,
+        "rms_error": 0.14906108379364014,
+        "relative_rms_error": 0.053871117532253265
+      },
+      "router_set_agreement": 0.6776315789473685
+    },
+    "optimized_vs_baseline": {
+      "logits": {
+        "max_abs_error": 1.625,
+        "rms_error": 0.20529477298259735,
+        "relative_rms_error": 0.049118366092443466,
+        "top1_matches": 30,
+        "tokens": 32,
+        "mean_kl_from_reference": 0.011103305034339428
+      },
+      "normalized": {
+        "max_abs_error": 3.5,
+        "rms_error": 0.1667836308479309,
+        "relative_rms_error": 0.06054097041487694
+      },
+      "router_set_agreement": 0.7450657894736842
+    },
+    "cached_vs_reference": {
+      "logits": {
+        "max_abs_error": 1.09375,
+        "rms_error": 0.16959500312805176,
+        "relative_rms_error": 0.04012858122587204,
+        "top1_matches": 30,
+        "tokens": 32,
+        "mean_kl_from_reference": 0.005404790863394737
+      },
+      "normalized": {
+        "max_abs_error": 2.375,
+        "rms_error": 0.13733643293380737,
+        "relative_rms_error": 0.04963378980755806
+      },
+      "router_set_agreement": 0.7055921052631579
+    },
+    "cached_vs_full": {
+      "logits": {
+        "max_abs_error": 1.21875,
+        "rms_error": 0.14535653591156006,
+        "relative_rms_error": 0.034507591277360916,
+        "top1_matches": 30,
+        "tokens": 32,
+        "mean_kl_from_reference": 0.004621246829628944
+      },
+      "normalized": {
+        "max_abs_error": 2.5,
+        "rms_error": 0.11256838589906693,
+        "relative_rms_error": 0.04070344194769859
+      },
+      "router_set_agreement": 0.787828947368421
+    }
+  },
+  "prefill_optimization_memory": {
+    "native_bf16": {
+      "command": [
+        "target/release/minnow",
+        "prefill-bench",
+        "--input",
+        "artifacts/prefill-input.json",
+        "--tokens",
+        "512,2048,4096,8192",
+        "--iterations",
+        "5"
+      ],
+      "exit_code": 0,
+      "abort_reason": null,
+      "elapsed_seconds": 28.463715003977995,
+      "baseline": {
+        "available_bytes": 123687374848,
+        "used_bytes": 6975795200,
+        "pswpin": 588466,
+        "pswpout": 2595394
+      },
+      "peak_used_bytes": 42875813888,
+      "peak_growth_bytes": 35900018688,
+      "final": {
+        "available_bytes": 123653332992,
+        "used_bytes": 7009837056,
+        "pswpin": 588468,
+        "pswpout": 2595394
+      }
+    },
+    "reference_bf16": {
+      "command": [
+        ".venv/bin/python",
+        "scripts/reference_generate.py",
+        "--attention",
+        "sdpa",
+        "--prefill-input",
+        "artifacts/prefill-input.json",
+        "--prefill-only",
+        "--prefill-lengths",
+        "512",
+        "2048",
+        "4096",
+        "8192",
+        "--prefill-iterations",
+        "5",
+        "--output",
+        "artifacts/prefill-reference-final.json"
+      ],
+      "exit_code": 0,
+      "abort_reason": null,
+      "elapsed_seconds": 46.390744460048154,
+      "baseline": {
+        "available_bytes": 125122265088,
+        "used_bytes": 5540904960,
+        "pswpin": 586860,
+        "pswpout": 2595394
+      },
+      "peak_used_bytes": 43117985792,
+      "peak_growth_bytes": 37577080832,
+      "final": {
+        "available_bytes": 125044989952,
+        "used_bytes": 5618180096,
+        "pswpin": 586863,
+        "pswpout": 2595394
+      }
+    },
+    "native_fp32_diagnostic": {
+      "command": [
+        "target/release/minnow",
+        "--dtype",
+        "f32",
+        "--attention-chunk-tokens",
+        "32",
+        "validate",
+        "--reference",
+        "artifacts/mini-multiblock-f32",
+        "--max-abs-error",
+        "0.001",
+        "--max-relative-error",
+        "0.00002"
+      ],
+      "exit_code": 0,
+      "abort_reason": null,
+      "elapsed_seconds": 14.508635655976832,
+      "baseline": {
+        "available_bytes": 124976619520,
+        "used_bytes": 5686550528,
+        "pswpin": 586867,
+        "pswpout": 2595394
+      },
+      "peak_used_bytes": 73120116736,
+      "peak_growth_bytes": 67433566208,
+      "final": {
+        "available_bytes": 125095288832,
+        "used_bytes": 5567881216,
+        "pswpin": 586867,
+        "pswpout": 2595394
+      }
+    }
+  },
+  "prefill_optimization_build": {
+    "recorded_at_utc": "2026-09-08T03:05:31.430329+00:00",
+    "cuda_toolkit": "13.0.3",
+    "candle": "0.11.0",
+    "torch": "2.10.0+cu130",
+    "source_sha256": {
+      "Cargo.lock": "3ac4bf77ac45a75fc07f22efe1b60bf5e6d549d0a69ab126eace0d56acc3d74b",
+      "Cargo.toml": "b322a8ef10d174b234b9936f0d41f7d1c88f756eb8446ff0ccf0ceaea25dfd22",
+      "build.rs": "5ffdbd6b974d79d7889eb478334e158bbd1f9c05e258c6bb2740ac905e88b57f",
+      "src/config.rs": "6c1bbc1b453adf0a589aef7ec1da346d149e20df685ae84412eede2caec477c1",
+      "src/cuda.rs": "df5bfe0a811647b0989fe277e49839a34a2c254479946c1f8392696de77d7514",
+      "src/decode.rs": "41a011ac68797fa5d3fbda53162ee2317856c39b12f9d901d88a75e7a69ff25e",
+      "src/kernels.cu": "eb688fdc8b2b6fa23d984f5fb5299dc6742aaeb67738931f84c19b52f87d15bb",
+      "src/lib.rs": "e4f09026353c49665934c68d1dd71f7378f6436a3cdaaa4e50c3b2b0ec103a14",
+      "src/main.rs": "470ff0dbbfe0302ebc43f112bebd3d79d0dc17d41800106fc620c08da7ece3f2",
+      "src/model.rs": "06bf682931d62137d8e384397fc4994d416c05d9d53dd221fa0731186e0cc752",
+      "src/server.rs": "b1e47852538d9e8fce0b66679d9c97e95bb4e56320e3eaf737bc31c460091e38",
+      "src/tokenizer.rs": "b79934e14b44ba204d3eeb7591ea0c48bf8563918fe80bff768b3ef83a8a9b9a",
+      "src/weights.rs": "488f708dde75c8a2b6374bfeda35708795b8cd59aeebfdf75e6c90ede67943e4"
+    }
+  },
+  "prefill_optimization_notes": [
+    "Original prefill and generation fields are retained as historical measurements; optimized_prefill contains current serving defaults.",
+    "Final current timing uses a repeat after an unrelated CUDA service initialized during the preceding pass. That service was idle for the repeat; system memory growth is a whole-system observation.",
+    "Models ran sequentially, under memory guards and the shared LLaDA model lock. No new swap-out was observed.",
+    "Native uses 4096-token transformer batches and 1024-query attention tiles. Timings use two warmups and five measured runs; no vocabulary projection.",
+    "8192-token input repeats the 4320-token seed; all backends receive the same sequence.",
+    "BF16 validation is not bitwise Transformers parity or a broad task-quality evaluation."
+  ]
+}

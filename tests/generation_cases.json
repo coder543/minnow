@@ -1,0 +1,6 @@
+[
+  {"name":"arithmetic","messages":[{"role":"user","content":"Calculate 1+5-28*0.5-200=?"}],"max_tokens":96},
+  {"name":"factual","messages":[{"role":"user","content":"What is the capital of France? Answer in one short sentence."}],"max_tokens":64},
+  {"name":"code","messages":[{"role":"user","content":"Write a Python function that returns the sum of the even numbers in a list. Return only the function."}],"max_tokens":128},
+  {"name":"longer_prompt","messages":[{"role":"user","content":"A box contains three red balls, four blue balls, and five green balls. We draw one ball uniformly at random, replace it, and then draw another ball. Explain how replacement affects the independence of the two draws, and calculate the probability that both balls are red. Give the exact fraction and briefly show your calculation."}],"max_tokens":128}
+]

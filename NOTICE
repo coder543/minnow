@@ -1,0 +1,13 @@
+minnow
+
+The LLaDA2.2 model execution and joint diffusion decoding logic are adapted into
+Rust from inclusionAI/LLaDA2.2-mini's Apache-2.0 reference implementation:
+https://huggingface.co/inclusionAI/LLaDA2.2-mini
+
+Reference copyright notice:
+Copyright 2025 Antgroup and The HuggingFace Inc. team. All rights reserved.
+
+minnow changes the implementation language, checkpoint loading, expert execution,
+attention/KV caching, and serving interface. The trained checkpoint is separate
+and is not distributed in this repository. The bundled small test checkpoint
+contains deterministic random weights generated for validation.

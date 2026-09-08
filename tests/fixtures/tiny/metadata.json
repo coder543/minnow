@@ -1,0 +1,11 @@
+{
+  "dtype": "float32",
+  "device": "cpu",
+  "forward_seconds_with_trace": 0.020631606981623918,
+  "torch": "2.10.0+cu130",
+  "source_sha256": {
+    "config.json": "e29a40ca215e7c8f242b7e5342940a32f3f3db2912003b05bfff845b282caa58",
+    "modeling_llada2_moe.py": "ab246877017cefd93821f7498a74ef0a6af9e4cfb8295d750491601a3f6e9a59",
+    "configuration_llada2_moe.py": "8ad02902146ca73fbf21a95c2802cfbe2c5059a6a06a4d065facdd50c2ce5fb9"
+  }
+}

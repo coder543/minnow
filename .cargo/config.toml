@@ -1,0 +1,3 @@
+[target.aarch64-unknown-linux-gnu]
+# gemm-f16 uses ARM FP16 instructions, including in unoptimized builds.
+rustflags = ["-C", "target-feature=+fp16"]

@@ -1,0 +1,5 @@
+[
+  {"name":"lhc","messages":[{"role":"user","content":"What is the LHC?"}],"max_tokens":2048},
+  {"name":"react_typescript","messages":[{"role":"user","content":"Write a React TypeScript example."}],"max_tokens":2048},
+  {"name":"fellowship","messages":[{"role":"user","content":"List the main characters of the Fellowship of the Ring with a short back story for each."}],"max_tokens":2048}
+]
