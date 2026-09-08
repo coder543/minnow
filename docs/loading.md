@@ -75,8 +75,8 @@ transient staging. Staging is released before serving requests.
 
 ```sh
 cargo build --release --features cuda --bin minnow --example bench_load
-target/release/examples/bench_load models/llada2.2-mini-int8-packed.mnw
-minnow --model models/llada2.2-mini-int8-packed.mnw validate
+target/release/examples/bench_load models/llada2.2-mini-int8.mnw
+minnow --model models/llada2.2-mini-int8.mnw validate
 ```
 
 The benchmark uses 4 GiB of host load headroom, matching the measured deployment.

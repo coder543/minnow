@@ -209,7 +209,7 @@
     },
     {
       "name": "mini-int8",
-      "container": "llada2.2-mini-int8-packed.mnw",
+      "container": "llada2.2-mini-int8.mnw",
       "manifest_blake3": "2edf0aab9594fd1b3ba2ce3ff6c55e6b1ea9d2963213c8cbbb61c8f7d436f4e2",
       "file_bytes": 17461885230,
       "peak_system_growth_bytes": 20455190528,

@@ -13,7 +13,7 @@
       "median_seconds": 4.815604078,
       "median_gb_per_second": 6.753474548619236
     },
-    "llada2.2-mini-int8-packed": {
+    "llada2.2-mini-int8": {
       "file_bytes": 17461885230,
       "seconds": [
         2.746151321,
@@ -43,7 +43,7 @@
       "median_seconds": 8.340367482,
       "median_gb_per_second": 7.463616126429092
     },
-    "llada2.2-flash-int8-packed": {
+    "llada2.2-flash-int8": {
       "file_bytes": 107497075539,
       "seconds": [
         13.412521287,
@@ -160,7 +160,7 @@
       "median_seconds": 6.861844543,
       "median_gb_per_second": 4.739550622751554
     },
-    "llada2.2-mini-int8-packed": {
+    "llada2.2-mini-int8": {
       "file_bytes": 17461885230,
       "seconds": [
         4.003713401,
@@ -190,7 +190,7 @@
       "median_seconds": 13.850451429,
       "median_gb_per_second": 4.494387894726865
     },
-    "llada2.2-flash-int8-packed": {
+    "llada2.2-flash-int8": {
       "file_bytes": 107497075539,
       "seconds": [
         26.277811767,

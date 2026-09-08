@@ -85,7 +85,7 @@
         "warmups": 2
       }
     ],
-    "before-llada2.2-mini-int8-packed-prefill": [
+    "before-llada2.2-mini-int8-prefill": [
       {
         "attention_chunk_tokens": 1024,
         "batched_experts": true,
@@ -331,7 +331,7 @@
         "warmups": 2
       }
     ],
-    "before-llada2.2-flash-int8-packed-prefill": [
+    "before-llada2.2-flash-int8-prefill": [
       {
         "attention_chunk_tokens": 1024,
         "batched_experts": true,
@@ -413,7 +413,7 @@
         "warmups": 2
       }
     ],
-    "after-llada2.2-mini-int8-packed-prefill": [
+    "after-llada2.2-mini-int8-prefill": [
       {
         "attention_chunk_tokens": 1024,
         "batched_experts": true,
@@ -495,7 +495,7 @@
         "warmups": 2
       }
     ],
-    "after-llada2.2-flash-int8-packed-prefill": [
+    "after-llada2.2-flash-int8-prefill": [
       {
         "attention_chunk_tokens": 1024,
         "batched_experts": true,
@@ -605,7 +605,7 @@
         "prefix_tokens": 4096
       }
     ],
-    "before-llada2.2-mini-int8-packed-refinement": [
+    "before-llada2.2-mini-int8-refinement": [
       {
         "batched_experts": true,
         "cached_forward_seconds": 0.0252690697,
@@ -683,7 +683,7 @@
         "prefix_tokens": 4096
       }
     ],
-    "before-llada2.2-flash-int8-packed-refinement": [
+    "before-llada2.2-flash-int8-refinement": [
       {
         "batched_experts": true,
         "cached_forward_seconds": 0.1307107665,
@@ -709,7 +709,7 @@
         "prefix_tokens": 4096
       }
     ],
-    "after-llada2.2-mini-int8-packed-refinement": [
+    "after-llada2.2-mini-int8-refinement": [
       {
         "batched_experts": true,
         "cached_forward_seconds": 0.0214758023,
@@ -735,7 +735,7 @@
         "prefix_tokens": 4096
       }
     ],
-    "after-llada2.2-flash-int8-packed-refinement": [
+    "after-llada2.2-flash-int8-refinement": [
       {
         "batched_experts": true,
         "cached_forward_seconds": 0.121533453,
