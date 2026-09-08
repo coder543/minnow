@@ -711,7 +711,6 @@ impl Model {
         let c = Config::load(path)?;
         let mut loader = crate::weights::WeightLoader::open(path)?;
         loader.set_memory_reserve_mib(reserve_mib)?;
-        let loader = Arc::new(loader);
         #[cfg(feature = "cuda")]
         if device.is_cuda()
             && loader
@@ -731,6 +730,8 @@ impl Model {
             "quantized CUDA execution requires BF16 activations; use --dtype bf16"
         );
         loader.check_memory(dtype)?;
+        loader.start_allocations(dtype, device)?;
+        let loader = Arc::new(loader);
         let vb = VarBuilder::from_backend(
             Box::new(crate::weights::SharedLoader(loader.clone())),
             dtype,

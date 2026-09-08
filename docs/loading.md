@@ -11,9 +11,21 @@ weights. `minnow --model CHECKPOINT.mnw validate` verifies the manifest and all
 weight/scale checksums separately, using bounded host memory and no CUDA context.
 `validate --reference DIRECTORY` retains the numerical-comparison workflow.
 
-The reader issues up to sixteen concurrent expert reads, combines adjacent code
-and scale regions, and reuses its buffers across layers. Staging is bounded at
-about 136 MiB, including the separate streaming buffer for large tensors.
+The loader overlaps three stages: a background allocator creates final weight
+storage from checkpoint metadata, a parallel reader fills the next batch, and
+the calling thread uploads the current batch. The allocator follows model layer
+order, prioritizes requested weights, and pauses after about 2 GiB of unclaimed
+final storage (plus one allocation). Allocations are synchronized and their
+ownership transferred to the inference stream without copying. The temporary
+stream is released after loading, preserving the original inference stream behavior.
+
+Two reusable batches hold up to 64 direct-read chunks each. Chunk size is bounded
+at 8 MiB, adjacent expert codes/scales share a read, and buffers grow only as needed.
+Maximum host staging is about 1 GiB plus an 8 MiB conversion/validation buffer.
+The reader may fill the next batch while allocation or upload is still running;
+ownership prevents buffers from being reused before upload completes. Errors
+close the pipeline and join its workers, including early consumer failures.
+
 Matching-dtype uploads fill final CUDA allocations directly, removing temporary
 device tensors, copy kernels, and destination zeroing. Small dtype conversions
 retain Candle's conversion semantics. One weight copy remains resident per
@@ -26,36 +38,38 @@ Times include model construction, file reads, allocation, and upload; they exclu
 CUDA initialization, tokenizer setup, inference, and unloading. No run is discarded.
 GB/s uses decimal bytes and the complete container file size.
 
-| Checkpoint | Median | Range | GB/s |
-| --- | ---: | ---: | ---: |
-| Mini BF16 | 6.86 s | 6.79–7.01 s | 4.74 |
-| Mini INT8 | 4.03 s | 4.00–4.03 s | 4.34 |
-| Mini NVFP4 | 3.30 s | 2.74–3.30 s | 3.19 |
-| Flash NVFP4 | 13.85 s | 13.50–13.88 s | 4.49 |
-| Flash INT8 | 19.73 s | 19.69–26.28 s | 5.45 |
+| Checkpoint | Previous median | Pipelined median | Range | GB/s |
+| --- | ---: | ---: | ---: | ---: |
+| Mini BF16 | 6.86 s | 4.82 s | 4.81–4.84 s | 6.75 |
+| Mini INT8 | 4.03 s | 2.73 s | 2.70–2.75 s | 6.40 |
+| Mini NVFP4 | 3.30 s | 2.14 s | 2.11–2.15 s | 4.93 |
+| Flash NVFP4 | 13.85 s | 8.34 s | 8.32–8.36 s | 7.46 |
+| Flash INT8 | 19.73 s | 13.36 s | 13.35–13.41 s | 8.04 |
 
-## Why the old loader was slow
-
-Identical Nsight Systems settings measured Mini INT8 at 21.64 seconds before
-and 4.18 seconds after, a **5.18×** improvement. The old load spent 10.09 seconds
-on serialized reads, 9.15 seconds hashing payloads, and 1.65 seconds consuming
-chunks through temporary CUDA tensors. The final load spends 2.68 seconds in
-read batches and 0.68 seconds consuming chunks. CUDA allocation calls fall from
-29,918 to 373, and kernel launches from 29,583 to 19; the remaining kernels perform
-dtype conversions.
+## Profiling
 
 A read-only, direct-I/O storage test reached **13.13 GB/s** with 1 MiB requests,
 queue depth 16, and an 8 GiB extent. Complete model loading remains below raw
-storage throughput: reads occur in tensor batches, followed by uploads, and
-model allocation/construction also takes time. The loader's `read_seconds`
+storage throughput because of tensor boundaries, allocation stalls, and uploads,
+even with those stages overlapping. The loader's `read_seconds`
 metric sums latency across concurrent workers; `read_wall_seconds` measures
-elapsed read-batch time. Do not add worker latency to wall-clock stages.
+elapsed read-batch time. Both overlap upload/allocation work in the pipeline.
+`read_wait_seconds` and `allocation_wait_seconds` measure the calling thread's
+waits for ready data and final storage. `consume_seconds` includes uploads,
+conversions, scale-value checks, and any CUDA stalls during those operations.
+Do not add overlapping stage times or worker latency to obtain total load time.
 
-The Flash INT8 profile takes 20.04 seconds: read batches account for 11.51
-seconds (9.34 GB/s of weight payload), chunk consumption for 2.63 seconds,
-and `cuMemAllocAsync` for 5.75 seconds. Allocation is the largest remaining
-non-I/O cost. The same minimal-request llama-swap measurement used previously
-falls from 98.77 to 21.94 seconds, including startup and the first response.
+The pipelined Flash INT8 Nsight capture takes **13.47 seconds**, compared with
+20.04 seconds before pipelining. Read batches occupy 10.61 seconds and the
+allocation worker spends 5.40 seconds allocating and handing off storage, with
+those stages overlapping. The calling thread spends 0.15 seconds waiting for
+allocations and 7.50 seconds waiting for reads. Upload/processing calls occupy
+5.37 seconds, including remaining CUDA stalls. Allocation latency still varies;
+the unprofiled three-run median above is the throughput comparison.
+
+All five checkpoints loaded successfully under the same sequential memory test;
+peak whole-system growth was **103.39 GiB**, including Flash INT8 weights and
+transient staging. Staging is released before serving requests.
 
 ## Reproduce
 
@@ -66,13 +80,15 @@ minnow --model models/llada2.2-mini-int8-packed.mnw validate
 ```
 
 The benchmark uses 4 GiB of host load headroom, matching the measured deployment.
-Run measurements separately from serving and compilation. `RAYON_NUM_THREADS`
-can limit the existing Rayon pool; the reader uses at most sixteen workers.
-The eight-worker comparison loaded Mini INT8 in 4.83 seconds versus 4.07 with
-sixteen, both with persistent staging and direct uploads.
+Run measurements separately from serving and compilation.
+The reader uses a dedicated Rayon pool for each batch; `RAYON_NUM_THREADS` controls CPU
+read concurrency independently of the bounded batch queue. A 16-chunk pipeline
+loaded Flash INT8 in 16–17 seconds; deeper read-ahead improved throughput during
+CUDA allocation stalls.
 
 Validation covers byte ordering across direct-read chunks, CPU and CUDA dtype
-conversion, unaligned host bytes, incomplete uploads, unchanged fixture forwards,
+conversion, unaligned host bytes, incomplete uploads, cross-stream ownership,
+early pipeline shutdown, short reads, unchanged fixture forwards,
 manifest/weight/scale corruption, and the checksum command with CUDA hidden.
 Real API tests pass streaming, prefill progress, tools and tool-result follow-up,
 UI assets, and cancellation after loading the new buffers.

@@ -6,6 +6,153 @@
     "llada2.2-mini-bf16": {
       "file_bytes": 32522059577,
       "seconds": [
+        4.815604078,
+        4.839788561,
+        4.813644866
+      ],
+      "median_seconds": 4.815604078,
+      "median_gb_per_second": 6.753474548619236
+    },
+    "llada2.2-mini-int8-packed": {
+      "file_bytes": 17461885230,
+      "seconds": [
+        2.746151321,
+        2.729411304,
+        2.701588617
+      ],
+      "median_seconds": 2.729411304,
+      "median_gb_per_second": 6.397674547771273
+    },
+    "llada2.2-mini-nvfp4": {
+      "file_bytes": 10528943618,
+      "seconds": [
+        2.110060588,
+        2.1360022929999998,
+        2.153706877
+      ],
+      "median_seconds": 2.1360022929999998,
+      "median_gb_per_second": 4.929275428451051
+    },
+    "llada2.2-flash-nvfp4": {
+      "file_bytes": 62249301239,
+      "seconds": [
+        8.340367482,
+        8.322743717,
+        8.35983287
+      ],
+      "median_seconds": 8.340367482,
+      "median_gb_per_second": 7.463616126429092
+    },
+    "llada2.2-flash-int8-packed": {
+      "file_bytes": 107497075539,
+      "seconds": [
+        13.412521287,
+        13.364041473,
+        13.354198692
+      ],
+      "median_seconds": 13.364041473,
+      "median_gb_per_second": 8.043755009005425
+    }
+  },
+  "profiles": {
+    "before": {
+      "bytes": 17449541120.0,
+      "reads": 29583.0,
+      "read_seconds": 10.09240179,
+      "checksum_seconds": 9.153953295,
+      "consume_seconds": 1.648472923,
+      "load_seconds": 21.641241085
+    },
+    "after": {
+      "bytes": 17449541120.0,
+      "reads": 14991.0,
+      "read_seconds": 16.243249567,
+      "read_wall_seconds": 2.675843962,
+      "staging_seconds": 0.034568717,
+      "checksum_seconds": 4.6528e-05,
+      "consume_seconds": 0.684125515,
+      "load_seconds": 4.177340966
+    },
+    "flash_int8_after": {
+      "bytes": 107481717760.0,
+      "reads": 24715.0,
+      "read_seconds": 98.992653601,
+      "read_wall_seconds": 11.510747714,
+      "staging_seconds": 0.036081734,
+      "checksum_seconds": 5.2768e-05,
+      "consume_seconds": 2.629903996,
+      "load_seconds": 20.03702495,
+      "cuda_allocation_seconds": 5.753564864
+    },
+    "flash_int8_pipelined": {
+      "allocation_worker": {
+        "bytes": 107546697728.0,
+        "allocation_seconds": 5.402700167,
+        "wall_seconds": 13.138198842
+      },
+      "io": {
+        "bytes": 107481717760.0,
+        "reads": 24715.0,
+        "read_seconds": 180.432865982,
+        "read_wall_seconds": 10.611962373,
+        "read_wait_seconds": 7.500221853,
+        "allocation_wait_seconds": 0.150524154,
+        "staging_seconds": 0.274358986,
+        "checksum_seconds": 0.0,
+        "consume_seconds": 5.371631892
+      },
+      "load_seconds": 13.472924305,
+      "cuda_api": {
+        "cuMemAllocAsync": {
+          "calls": 601,
+          "seconds": 5.398308864
+        },
+        "cuStreamSynchronize": {
+          "calls": 49003,
+          "seconds": 4.015454912
+        },
+        "cuMemcpyHtoDAsync_v2": {
+          "calls": 48523,
+          "seconds": 2.096871216
+        },
+        "cuStreamWaitEvent": {
+          "calls": 97018,
+          "seconds": 0.028189888
+        },
+        "cuEventRecord": {
+          "calls": 48001,
+          "seconds": 0.017218624
+        },
+        "cuEventCreate": {
+          "calls": 2218,
+          "seconds": 0.00213496
+        },
+        "cuModuleLoadData": {
+          "calls": 1,
+          "seconds": 0.001356896
+        },
+        "cuLaunchKernel": {
+          "calls": 31,
+          "seconds": 0.000742544
+        }
+      }
+    }
+  },
+  "ssd_read_gb_per_second": 13.134456562,
+  "cuda_api_counts": {
+    "mini_before": {
+      "allocation_calls": 29918,
+      "kernel_launches": 29583
+    },
+    "mini_after": {
+      "allocation_calls": 373,
+      "kernel_launches": 19
+    }
+  },
+  "pre_pipeline_models": {
+    "llada2.2-mini-bf16": {
+      "file_bytes": 32522059577,
+      "seconds": [
         7.01458183,
         6.861844543,
         6.792482313
@@ -54,46 +201,8 @@
       "median_gb_per_second": 5.447208901906336
     }
   },
-  "profiles": {
-    "before": {
-      "bytes": 17449541120.0,
-      "reads": 29583.0,
-      "read_seconds": 10.09240179,
-      "checksum_seconds": 9.153953295,
-      "consume_seconds": 1.648472923,
-      "load_seconds": 21.641241085
-    },
-    "after": {
-      "bytes": 17449541120.0,
-      "reads": 14991.0,
-      "read_seconds": 16.243249567,
-      "read_wall_seconds": 2.675843962,
-      "staging_seconds": 0.034568717,
-      "checksum_seconds": 4.6528e-05,
-      "consume_seconds": 0.684125515,
-      "load_seconds": 4.177340966
-    },
-    "flash_int8_after": {
-      "bytes": 107481717760.0,
-      "reads": 24715.0,
-      "read_seconds": 98.992653601,
-      "read_wall_seconds": 11.510747714,
-      "staging_seconds": 0.036081734,
-      "checksum_seconds": 5.2768e-05,
-      "consume_seconds": 2.629903996,
-      "load_seconds": 20.03702495,
-      "cuda_allocation_seconds": 5.753564864
-    }
-  },
-  "ssd_read_gb_per_second": 13.134456562,
-  "cuda_api_counts": {
-    "mini_before": {
-      "allocation_calls": 29918,
-      "kernel_launches": 29583
-    },
-    "mini_after": {
-      "allocation_calls": 373,
-      "kernel_launches": 19
-    }
+  "pipeline_memory": {
+    "retained_staging_limit_mib": 1033,
+    "peak_system_growth_gib": 103.38678359985352
   }
 }

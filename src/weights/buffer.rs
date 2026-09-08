@@ -19,31 +19,62 @@ impl WeightBuffer {
     pub(super) fn new(count: usize, dtype: DType, device: &Device) -> Result<Self> {
         #[cfg(feature = "cuda")]
         if let Device::Cuda(dev) = device {
-            macro_rules! allocate {
-                ($ty:ty) => {{
-                    // SAFETY: this storage stays private until every element is
-                    // initialized by write; failures only free the allocation.
-                    let data = unsafe { dev.alloc::<$ty>(count) }?;
-                    Storage::Cuda(candle_core::CudaStorage::wrap_cuda_slice(data, dev.clone()))
-                }};
-            }
-            let storage = match dtype {
-                DType::U8 => allocate!(u8),
-                DType::BF16 => allocate!(half::bf16),
-                DType::F16 => allocate!(half::f16),
-                DType::F32 => allocate!(f32),
-                _ => Storage::Tensor(Tensor::zeros(count, dtype, device)?),
-            };
-            return Ok(Self {
-                storage,
-                dtype,
-                device: device.clone(),
-                count,
-                written: 0,
-            });
+            return Self::on_stream(count, dtype, device, &dev.cuda_stream());
         }
         Ok(Self {
             storage: Storage::Tensor(Tensor::zeros(count, dtype, device)?),
+            dtype,
+            device: device.clone(),
+            count,
+            written: 0,
+        })
+    }
+    #[cfg(feature = "cuda")]
+    pub(super) fn on_stream(
+        count: usize,
+        dtype: DType,
+        device: &Device,
+        stream: &std::sync::Arc<candle_core::cuda_backend::cudarc::driver::CudaStream>,
+    ) -> Result<Self> {
+        let Device::Cuda(dev) = device else {
+            anyhow::bail!("CUDA allocation requires CUDA device")
+        };
+        macro_rules! allocate {
+            ($ty:ty) => {{
+                // SAFETY: private storage; finish requires every element to be written.
+                let data = unsafe { stream.alloc::<$ty>(count) }?;
+                let data = if stream != &dev.cuda_stream() {
+                    // The slice must ultimately belong to the inference stream.
+                    // Otherwise every weight keeps the temporary allocation stream
+                    // alive and cudarc remains in multi-stream mode during inference.
+                    stream.synchronize()?;
+                    let mut transfer = AllocationTransfer {
+                        pointer: Some(data.leak()),
+                        stream,
+                    };
+                    // SAFETY: completed allocation, unchanged element type/count,
+                    // exclusive ownership transferred without copying or freeing it.
+                    let data = unsafe {
+                        dev.cuda_stream()
+                            .upgrade_device_ptr::<$ty>(transfer.pointer.unwrap(), count)
+                    };
+                    transfer.pointer = None;
+                    data
+                } else {
+                    data
+                };
+                Storage::Cuda(candle_core::CudaStorage::wrap_cuda_slice(data, dev.clone()))
+            }};
+        }
+        let storage = match dtype {
+            DType::U8 => allocate!(u8),
+            DType::BF16 => allocate!(half::bf16),
+            DType::F16 => allocate!(half::f16),
+            DType::F32 => allocate!(f32),
+            _ => Storage::Tensor(Tensor::zeros(count, dtype, device)?),
+        };
+        Ok(Self {
+            storage,
             dtype,
             device: device.clone(),
             count,
@@ -111,6 +142,33 @@ impl WeightBuffer {
                 false,
             ),
         })
+    }
+}
+
+// Free a leaked allocation if cudarc panics while creating its new ownership
+// wrapper. No allocation may escape error cleanup, including uninitialized ones.
+#[cfg(feature = "cuda")]
+struct AllocationTransfer<'a> {
+    pointer: Option<candle_core::cuda_backend::cudarc::driver::sys::CUdeviceptr>,
+    stream: &'a std::sync::Arc<candle_core::cuda_backend::cudarc::driver::CudaStream>,
+}
+#[cfg(feature = "cuda")]
+impl Drop for AllocationTransfer<'_> {
+    fn drop(&mut self) {
+        use candle_core::cuda_backend::cudarc::driver::result;
+        if let Some(pointer) = self.pointer {
+            // SAFETY: sole owner of a valid, unused allocation in the current context.
+            let result = unsafe {
+                if self.stream.context().has_async_alloc() {
+                    result::free_async(pointer, self.stream.cu_stream())
+                } else {
+                    result::free_sync(pointer)
+                }
+            };
+            if let Err(error) = result {
+                tracing::warn!(%error, "freeing unclaimed weight allocation");
+            }
+        }
     }
 }
 

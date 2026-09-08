@@ -18,7 +18,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(feature = "cuda")]
+mod allocation;
 mod buffer;
+mod reader;
 use buffer::WeightBuffer;
 
 const ALIGN: usize = 4096;
@@ -62,7 +65,10 @@ pub(crate) struct Staging {
 }
 impl Staging {
     pub(crate) fn new() -> Result<Self> {
-        let len = STAGING_BYTES + 2 * ALIGN;
+        Self::with_capacity(STAGING_BYTES + 2 * ALIGN)
+    }
+    fn with_capacity(len: usize) -> Result<Self> {
+        let len = len.max(ALIGN).div_ceil(ALIGN) * ALIGN;
         let layout = std::alloc::Layout::from_size_align(len, ALIGN)?;
         // SAFETY: valid nonempty layout, released with this layout in Drop.
         let p = unsafe { std::alloc::alloc_zeroed(layout) };
@@ -94,11 +100,14 @@ pub struct WeightLoader {
     tensors: HashMap<String, Location>,
     staging: Mutex<Staging>,
     read_buffers: Mutex<Vec<Staging>>,
+    read_pool: std::sync::OnceLock<Result<rayon::ThreadPool, String>>,
     large: bool,
     reserve_bytes: u64,
     pub elements: u64,
     timings: Mutex<ReadTimings>,
     verify_checksums: bool,
+    #[cfg(feature = "cuda")]
+    allocations: Option<allocation::Allocations>,
 }
 
 #[derive(Default)]
@@ -107,6 +116,8 @@ struct ReadTimings {
     reads: u64,
     read: Duration,
     read_wall: Duration,
+    read_wait: Duration,
+    allocation_wait: Duration,
     staging: Duration,
     checksum: Duration,
     consume: Duration,
@@ -121,6 +132,8 @@ impl Drop for WeightLoader {
                 reads = t.reads,
                 read_seconds = t.read.as_secs_f64(),
                 read_wall_seconds = t.read_wall.as_secs_f64(),
+                read_wait_seconds = t.read_wait.as_secs_f64(),
+                allocation_wait_seconds = t.allocation_wait.as_secs_f64(),
                 staging_seconds = t.staging.as_secs_f64(),
                 checksum_seconds = t.checksum.as_secs_f64(),
                 consume_seconds = t.consume.as_secs_f64(),
@@ -268,11 +281,14 @@ impl WeightLoader {
             tensors,
             staging: Mutex::new(Staging::new()?),
             read_buffers: Mutex::new(Vec::new()),
+            read_pool: std::sync::OnceLock::new(),
             large: total_bytes > LARGE_MODEL,
             reserve_bytes: DEFAULT_MEMORY_RESERVE_MIB * 1024 * 1024,
             elements,
             timings: Mutex::new(ReadTimings::default()),
             verify_checksums: false,
+            #[cfg(feature = "cuda")]
+            allocations: None,
         })
     }
     fn open_container(path: &Path) -> Result<Self> {
@@ -313,9 +329,12 @@ impl WeightLoader {
             tensors,
             staging: Mutex::new(Staging::new()?),
             read_buffers: Mutex::new(Vec::new()),
+            read_pool: std::sync::OnceLock::new(),
             elements,
             timings: Mutex::new(ReadTimings::default()),
             verify_checksums: false,
+            #[cfg(feature = "cuda")]
+            allocations: None,
         })
     }
     /// Metadata only; no tensor bytes are loaded by an inventory operation.
@@ -407,104 +426,47 @@ impl WeightLoader {
         }
         Ok(())
     }
-    /// Read independent expert regions concurrently, reusing at most sixteen
-    /// staging buffers. Adjacent codes/scales share one direct read. Uploads
-    /// remain on the calling thread's CUDA stream and final weight allocation.
+    /// Pipeline bounded direct reads with consumption into final storage.
     fn visit_parts(
         &self,
         name: &str,
         parts: &[Location],
-        mut consume: impl FnMut(usize, bool, &[u8]) -> Result<()>,
+        consume: impl FnMut(usize, bool, &[u8]) -> Result<()>,
     ) -> Result<()> {
-        use rayon::prelude::*;
-        let spans: Option<Vec<_>> = parts
-            .iter()
-            .map(|p| {
-                let start = p
-                    .scales
-                    .as_ref()
-                    .map_or(p.offset, |s| p.offset.min(s.offset));
-                let end = p.scales.as_ref().map_or(p.offset + p.bytes as u64, |s| {
-                    (p.offset + p.bytes as u64).max(s.offset + s.bytes)
-                });
-                let aligned = start / ALIGN as u64 * ALIGN as u64;
-                let span = usize::try_from(end - aligned).ok()?;
-                (span <= STAGING_BYTES).then_some((aligned, span.div_ceil(ALIGN) * ALIGN))
-            })
-            .collect();
-        if parts.len() < 2 || spans.is_none() || self.verify_checksums {
-            for (i, part) in parts.iter().enumerate() {
-                self.visit(name, part, |bytes| consume(i, false, bytes))?;
-                if let Some(s) = &part.scales {
-                    let loc = Location {
-                        offset: s.offset,
-                        bytes: s.bytes as usize,
-                        checksum: Some(s.blake3.clone()),
-                        ..part.clone()
-                    };
-                    self.visit(name, &loc, |bytes| consume(i, true, bytes))?;
-                }
-            }
-            return Ok(());
+        self.read_parts(name, parts, consume)
+    }
+    pub(crate) fn start_allocations(&mut self, dtype: DType, device: &Device) -> Result<()> {
+        #[cfg(feature = "cuda")]
+        if device.is_cuda() {
+            self.allocations = Some(allocation::Allocations::start(
+                &self.tensors,
+                dtype,
+                device,
+            )?);
         }
-        let spans = spans.unwrap();
-        let workers = parts.len().min(16).min(rayon::current_num_threads());
-        let begun = Instant::now();
-        let mut buffers = self
-            .read_buffers
-            .lock()
-            .map_err(|_| anyhow::anyhow!("read buffer lock poisoned"))?;
-        while buffers.len() < workers {
-            buffers.push(Staging::new()?);
-        }
-        self.timings.lock().unwrap().staging += begun.elapsed();
-        for base in (0..parts.len()).step_by(workers) {
-            let count = workers.min(parts.len() - base);
-            let begun = Instant::now();
-            let reads: Vec<Result<Duration>> = buffers[..count]
-                .par_iter_mut()
-                .enumerate()
-                .map(|(i, buffer)| {
-                    let part = &parts[base + i];
-                    let (offset, length) = spans[base + i];
-                    let start = Instant::now();
-                    let got = loop {
-                        match self.files[part.file].read_at(&mut buffer.bytes()[..length], offset) {
-                            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                            value => {
-                                break value.with_context(|| format!("direct read of {name}"))?;
-                            }
-                        }
-                    };
-                    let needed = (part.offset - offset) as usize + part.bytes;
-                    let needed = part.scales.as_ref().map_or(needed, |s| {
-                        needed.max((s.offset - offset + s.bytes) as usize)
-                    });
-                    ensure!(got >= needed, "short direct read for {name}");
-                    Ok(start.elapsed())
-                })
-                .collect();
-            self.timings.lock().unwrap().read_wall += begun.elapsed();
-            for (i, read) in reads.into_iter().enumerate() {
-                let read = read?;
-                let part = &parts[base + i];
-                let (offset, _) = spans[base + i];
-                let buffer = buffers[i].bytes();
-                let start = (part.offset - offset) as usize;
-                let begun = Instant::now();
-                consume(base + i, false, &buffer[start..start + part.bytes])?;
-                if let Some(s) = &part.scales {
-                    let start = (s.offset - offset) as usize;
-                    consume(base + i, true, &buffer[start..start + s.bytes as usize])?;
-                }
-                let mut t = self.timings.lock().unwrap();
-                t.read += read;
-                t.reads += 1;
-                t.bytes += part.bytes as u64 + part.scales.as_ref().map_or(0, |s| s.bytes);
-                t.consume += begun.elapsed();
-            }
-        }
+        #[cfg(not(feature = "cuda"))]
+        let _ = (dtype, device);
         Ok(())
+    }
+    fn buffer(
+        &self,
+        name: &str,
+        scales: bool,
+        count: usize,
+        dtype: DType,
+        device: &Device,
+    ) -> Result<WeightBuffer> {
+        #[cfg(feature = "cuda")]
+        if device.is_cuda()
+            && let Some(allocations) = &self.allocations
+        {
+            let start = Instant::now();
+            let result = allocations.take(name, scales, count, dtype, device);
+            self.timings.lock().unwrap().allocation_wait += start.elapsed();
+            return result;
+        }
+        let _ = (name, scales);
+        WeightBuffer::new(count, dtype, device)
     }
     /// Bounded raw traversal for conversion; validation is a separate operation.
     pub fn visit_tensor(&self, name: &str, consume: impl FnMut(&[u8]) -> Result<()>) -> Result<()> {
@@ -627,7 +589,9 @@ impl WeightLoader {
         let encoding = first.encoding;
         let group_size = first.group_size;
         let count = shape.0 * shape.1 * shape.2;
-        let mut codes = WeightBuffer::new(
+        let mut codes = self.buffer(
+            name,
+            false,
             if encoding.int8() { count } else { count / 2 },
             DType::U8,
             device,
@@ -646,7 +610,7 @@ impl WeightLoader {
         } else {
             None
         };
-        let mut scales = WeightBuffer::new(count / group_size, scale_dtype, device)?;
+        let mut scales = self.buffer(name, true, count / group_size, scale_dtype, device)?;
         self.visit_parts(name, &parts, |_, is_scale, bytes| {
             if !is_scale {
                 codes.write(bytes, DType::U8)?;
@@ -693,7 +657,7 @@ impl WeightLoader {
                 self.reserve_bytes / (1024 * 1024)
             );
         }
-        let mut out = WeightBuffer::new(shape.elem_count(), dtype, device)?;
+        let mut out = self.buffer(name, false, shape.elem_count(), dtype, device)?;
         self.visit_parts(name, &parts, |index, is_scale, buffer| {
             ensure!(!is_scale, "unexpected scale for {name}");
             let part = &parts[index];
@@ -735,9 +699,9 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    struct Directory(PathBuf);
+    pub(super) struct Directory(pub(super) PathBuf);
     impl Directory {
-        fn new() -> Self {
+        pub(super) fn new() -> Self {
             let path = std::env::temp_dir().join(format!(
                 "minnow-weights-test-{}-{}",
                 std::process::id(),
@@ -763,7 +727,7 @@ mod tests {
             "large".to_owned(),
             Tensor::from_vec(values.clone(), n, &Device::Cpu)?,
         )]);
-        for e in 0..3 {
+        for e in 0..137 {
             weights.insert(
                 format!("mlp.experts.{e}.gate_proj.weight"),
                 Tensor::from_vec(
@@ -783,11 +747,11 @@ mod tests {
         assert_eq!(actual, values);
         let packed = loader.load(
             "mlp.experts.gate_proj.weight",
-            (3, 3, 5).into(),
+            (137, 3, 5).into(),
             DType::F32,
             &Device::Cpu,
         )?;
-        let expected: Vec<f32> = (0..3)
+        let expected: Vec<f32> = (0..137)
             .flat_map(|e| (0..15).map(move |i| (e * 100 + i) as f32))
             .collect();
         assert_eq!(packed.flatten_all()?.to_vec1::<f32>()?, expected);
@@ -800,7 +764,7 @@ mod tests {
             loader
                 .load(
                     "mlp.experts.gate_proj.weight",
-                    (4, 3, 5).into(),
+                    (138, 3, 5).into(),
                     DType::F32,
                     &Device::Cpu
                 )

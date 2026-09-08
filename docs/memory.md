@@ -4,8 +4,11 @@ Each minnow instance holds one resident weight set, shared across its requests.
 Independent instances can coexist when memory permits. Checkpoint data is
 read with Linux direct I/O into bounded staging buffers and final tensor
 allocations. Loading does not use mmap or construct a complete CPU model before
-copying it to CUDA. Expert reads use up to sixteen reusable 8 MiB buffers,
-plus an 8 MiB streaming buffer for large tensors. Matching-dtype CUDA uploads
+copying it to CUDA. Reads and uploads overlap using two reusable batches of up
+to 64 chunks, each at most 8 MiB. Buffers grow to fit the reads, with about 1 GiB
+of maximum staging plus a separate 8 MiB conversion/validation buffer. CUDA
+allocations start from metadata on a background stream and stay ahead of uploads;
+these are the final weights, not extra copies. Matching-dtype CUDA uploads
 write directly into final storage without a temporary device tensor. Checksums
 are verified separately with `minnow --model CHECKPOINT.mnw validate`.
 See [loader measurements](loading.md) for timings and profiling.
