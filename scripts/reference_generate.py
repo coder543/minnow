@@ -19,7 +19,7 @@ os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
 import torch
 from transformers import AutoConfig, AutoTokenizer
 from transformers.dynamic_module_utils import get_class_from_dynamic_module
-from weight_io import ModelLease, WeightReader, available_memory, RESERVE
+from weight_io import WeightReader, available_memory, RESERVE
 
 
 def main():
@@ -39,7 +39,6 @@ def main():
         p.error('--prefill-iterations must be 1–100')
     torch.set_num_threads(4)
     torch.backends.cuda.matmul.allow_tf32 = False
-    lease = ModelLease()
     reader = WeightReader(args.model)
     try:
         required = sum(t[2] for t in reader.tensors.values())
@@ -138,7 +137,6 @@ def main():
             'results': results, 'prefill': prefill_results}, indent=2) + '\n')
     finally:
         reader.close()
-        lease.close()
 
 
 if __name__ == '__main__':

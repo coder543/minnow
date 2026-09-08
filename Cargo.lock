@@ -1331,7 +1331,6 @@ dependencies = [
  "candle-nn",
  "clap",
  "cudaforge",
- "fs2",
  "half",
  "http-body-util",
  "libc",

@@ -1,6 +1,7 @@
 # Memory and checkpoint loading
 
-Minnow holds one resident weight set, shared across requests. Checkpoint data is
+Each minnow instance holds one resident weight set, shared across its requests.
+Independent instances can coexist when memory permits. Checkpoint data is
 read with Linux direct I/O into bounded staging buffers and final tensor
 allocations. Loading does not use mmap or construct a complete CPU model before
 copying it to CUDA. Use a filesystem that supports `O_DIRECT`; unsupported
@@ -18,7 +19,7 @@ Approximate weight payloads, with only routed experts quantized:
 | Model | BF16 | INT8 | NVFP4 |
 | --- | ---: | ---: | ---: |
 | Mini | 30.28 GiB | 16.25 GiB | 9.79 GiB |
-| Flash | — | — | 57.96 GiB |
+| Flash | 191.65 GiB | 100.10 GiB | 57.96 GiB |
 
 Weights are only part of the memory requirement. Reserve room for K/V,
 activations, attention scores, the CUDA runtime, and allocator scratch. Mini's
@@ -54,10 +55,12 @@ through views. Four requests do not each reserve an entire maximum-context cache
 
 ## Diagnostic resource controls
 
-Runtime and full-model reference tools use a per-user process lease at
-`/tmp/minnow-model-<uid>.lock` to prevent overlapping full-checkpoint loads.
-The loader checks available system memory and retains 16 GiB of host headroom.
-This host check does not replace GPU VRAM sizing on discrete GPUs.
+The loader checks available system memory before and during loading.
+`--memory-reserve-mib` sets the host headroom it retains, default 16384 (16 GiB).
+A deployment manager can choose a smaller reserve after budgeting for weights,
+K/V, working allocations, and other resident processes. This is a load-time
+check, not a runtime memory reservation or a replacement for GPU VRAM sizing
+on discrete GPUs. There is no cross-process model lock.
 
 For large benchmarks, `scripts/memory_guard.py` runs a command with explicit
 system-memory growth and reserve budgets. It also monitors swap-out and Linux

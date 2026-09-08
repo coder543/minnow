@@ -676,10 +676,9 @@ pub struct Model {
     fused_qkv: bool,
     prefill_chunk_tokens: usize,
     attention_chunk_tokens: usize,
-    // Drop after weight fields and before releasing the cross-process lease.
+    // Drop after the weight fields.
     #[cfg(feature = "cuda")]
     workspace_cache: Option<crate::cuda::workspace::WorkspaceCache>,
-    _lease: Option<crate::weights::ModelLease>,
 }
 impl Drop for Model {
     fn drop(&mut self) {
@@ -696,8 +695,23 @@ impl Drop for Model {
 }
 impl Model {
     pub fn load(path: &Path, dtype: DType, device: &Device) -> Result<Self> {
+        Self::load_with_memory_reserve(
+            path,
+            dtype,
+            device,
+            crate::weights::DEFAULT_MEMORY_RESERVE_MIB,
+        )
+    }
+    pub fn load_with_memory_reserve(
+        path: &Path,
+        dtype: DType,
+        device: &Device,
+        reserve_mib: u64,
+    ) -> Result<Self> {
         let c = Config::load(path)?;
-        let loader = Arc::new(crate::weights::WeightLoader::open(path)?);
+        let mut loader = crate::weights::WeightLoader::open(path)?;
+        loader.set_memory_reserve_mib(reserve_mib)?;
+        let loader = Arc::new(loader);
         #[cfg(feature = "cuda")]
         if device.is_cuda()
             && loader
@@ -716,7 +730,7 @@ impl Model {
                     .any(|(_, _, encoding)| encoding.quantized()),
             "quantized CUDA execution requires BF16 activations; use --dtype bf16"
         );
-        let lease = loader.lease_and_check(dtype)?;
+        loader.check_memory(dtype)?;
         let vb = VarBuilder::from_backend(
             Box::new(crate::weights::SharedLoader(loader.clone())),
             dtype,
@@ -798,7 +812,6 @@ impl Model {
             attention_chunk_tokens: 1024,
             #[cfg(feature = "cuda")]
             workspace_cache: crate::cuda::workspace::WorkspaceCache::new(device),
-            _lease: lease,
         })
     }
 

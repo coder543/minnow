@@ -1,10 +1,9 @@
-"""Direct-I/O checkpoint reader with bounded staging and shared model ownership.
+"""Direct-I/O checkpoint reader with bounded staging.
 
 No safetensors.safe_open (which mmaps), no state-dict copy of the model, and no
 CPU model followed by .to('cuda'). Supports the original read-only shards.
 """
 import ctypes
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -20,20 +19,6 @@ def available_memory():
         if line.startswith('MemAvailable:'):
             return int(line.split()[1]) * 1024
     raise RuntimeError('MemAvailable is missing')
-
-
-class ModelLease:
-    def __init__(self):
-        path = f'/tmp/minnow-model-{os.geteuid()}.lock'
-        self.file = open(path, 'a+b')
-        try:
-            fcntl.flock(self.file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            self.file.close()
-            raise RuntimeError(f'another minnow/reference model is resident; lock {path}') from None
-
-    def close(self):
-        self.file.close()
 
 
 class WeightReader:

@@ -2,8 +2,10 @@
 
 - Treat input checkpoints as read-only. Keep generated checkpoints in an explicit,
   user-selected model directory; do not assume a developer's home-directory layout.
-- Keep one complete resident weight set across runtime and validation processes.
-  Preserve the shared model lease. Small synthetic fixtures are exempt.
+- Keep one resident weight copy per model instance, shared across its requests.
+  Separate minnow instances are independent and may coexist when memory permits.
+  Do not add cross-process model locks or inflate router memory reservations.
+  Run performance/reference benchmarks separately from serving for controlled measurements.
 - Do not mmap checkpoint files. Use bounded direct reads into final allocations;
   do not construct a complete host model and then copy it to CUDA. Expert views
   must share their packed storage.

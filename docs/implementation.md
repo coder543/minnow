@@ -23,13 +23,15 @@ reference validation.
   inserted masks and preserve the prompt. Termination and edit suppression follow
   the checkpoint's joint decoder. A hard step limit must report non-convergence.
 - Logits are for the same positions, with no autoregressive shift.
-- Keep one resident weight set across requests. A bounded LRU pool retains
-  independent conversation K/V slots; reuse requires exact complete token blocks.
+- Keep one resident weight set per instance across its requests. A bounded LRU
+  pool retains independent conversation K/V slots; reuse requires exact complete
+  token blocks.
 
 ## CUDA execution
 
-The runtime streams checkpoints into one resident weight set, shared across
-requests. See [memory ownership](memory.md) and [validation](validation.md).
+Each instance streams its checkpoint into one resident weight set, shared across
+its requests. Separate server processes are independent. See
+[memory ownership](memory.md) and [validation](validation.md).
 
 Current CUDA execution uses pointer-batched expert GEMMs for a single block and
 variable-size grouped GEMMs for prefill, with BF16 weights and FP32 accumulation.

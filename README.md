@@ -40,8 +40,9 @@ target/release/minnow --model models/LLaDA2.2-mini serve --listen 127.0.0.1:8080
 The first CUDA build fetches pinned CUTLASS headers through CudaForge; subsequent
 builds reuse its cache. Third-party notices are in `vendor/flash-attention/`.
 
-Python is not required for serving. A CPU build (`cargo build --release`) is
-available for small test fixtures and reference diagnostics.
+Serving and checkpoint conversion do not require Python. A CPU build
+(`cargo build --release`) is available for small test fixtures and reference
+diagnostics.
 
 ## Quantization
 

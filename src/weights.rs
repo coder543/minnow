@@ -4,7 +4,6 @@ use crate::container::{Container, Encoding, Region};
 use anyhow::{Context, Result, bail, ensure};
 use candle_core::{DType, Device, Shape, Tensor};
 use candle_nn::{Init, var_builder::SimpleBackend};
-use fs2::FileExt as LockExt;
 use serde::Deserialize;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -14,40 +13,14 @@ use std::{
         fd::AsRawFd,
         unix::fs::{FileExt, OpenOptionsExt},
     },
-    path::{Path, PathBuf},
+    path::Path,
     sync::Mutex,
 };
 
 const ALIGN: usize = 4096;
 pub const STAGING_BYTES: usize = 8 * 1024 * 1024;
 const LARGE_MODEL: u64 = 256 * 1024 * 1024;
-const RESERVE: u64 = 16 * 1024 * 1024 * 1024;
-
-pub struct ModelLease {
-    _file: File,
-}
-impl ModelLease {
-    pub fn acquire() -> Result<Self> {
-        // Same path and flock protocol as scripts/weight_io.py.
-        let path = PathBuf::from(format!("/tmp/minnow-model-{}.lock", unsafe {
-            libc::geteuid()
-        }));
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .mode(0o600)
-            .open(&path)?;
-        file.try_lock_exclusive().with_context(|| {
-            format!(
-                "another minnow/reference model is resident; lock {}",
-                path.display()
-            )
-        })?;
-        Ok(Self { _file: file })
-    }
-}
+pub const DEFAULT_MEMORY_RESERVE_MIB: u64 = 16 * 1024;
 
 pub fn available_memory() -> Result<u64> {
     let mem = std::fs::read_to_string("/proc/meminfo")?;
@@ -117,6 +90,7 @@ pub struct WeightLoader {
     tensors: HashMap<String, Location>,
     staging: Mutex<Staging>,
     large: bool,
+    reserve_bytes: u64,
     pub elements: u64,
 }
 
@@ -258,6 +232,7 @@ impl WeightLoader {
             tensors,
             staging: Mutex::new(Staging::new()?),
             large: total_bytes > LARGE_MODEL,
+            reserve_bytes: DEFAULT_MEMORY_RESERVE_MIB * 1024 * 1024,
             elements,
         })
     }
@@ -295,6 +270,7 @@ impl WeightLoader {
                     .open(path)?,
             ],
             large: container.manifest.weight_bytes() > LARGE_MODEL,
+            reserve_bytes: DEFAULT_MEMORY_RESERVE_MIB * 1024 * 1024,
             tensors,
             staging: Mutex::new(Staging::new()?),
             elements,
@@ -388,11 +364,16 @@ impl WeightLoader {
         };
         self.visit(name, &location, consume)
     }
-    pub fn lease_and_check(&self, dtype: DType) -> Result<Option<ModelLease>> {
+    pub fn set_memory_reserve_mib(&mut self, mib: u64) -> Result<()> {
+        self.reserve_bytes = mib
+            .checked_mul(1024 * 1024)
+            .context("memory reserve overflow")?;
+        Ok(())
+    }
+    pub fn check_memory(&self, dtype: DType) -> Result<()> {
         if !self.large {
-            return Ok(None);
+            return Ok(());
         }
-        let lease = ModelLease::acquire()?;
         let required = self.tensors.iter().try_fold(0u64, |sum, (name, t)| {
             let bytes = if t.encoding.quantized() {
                 t.bytes as u64 + t.scales.as_ref().map_or(0, |s| s.bytes)
@@ -408,9 +389,13 @@ impl WeightLoader {
         })?;
         let available = available_memory()?;
         ensure!(
-            available >= required + RESERVE,
-            "loading needs {:.2} GiB for weights plus 16 GiB system headroom; only {:.2} GiB available",
+            available
+                >= required
+                    .checked_add(self.reserve_bytes)
+                    .context("memory requirement overflow")?,
+            "loading needs {:.2} GiB for weights plus {:.2} GiB system headroom; only {:.2} GiB available",
             required as f64 / 2f64.powi(30),
+            self.reserve_bytes as f64 / 2f64.powi(30),
             available as f64 / 2f64.powi(30)
         );
         tracing::info!(
@@ -418,7 +403,7 @@ impl WeightLoader {
             staging_mib = STAGING_BYTES / 1024 / 1024,
             "loading one resident weight copy with direct I/O"
         );
-        Ok(Some(lease))
+        Ok(())
     }
     fn parts(&self, name: &str, shape: &Shape) -> Result<Vec<Location>> {
         if let Some(loc) = self.tensors.get(name) {
@@ -552,8 +537,9 @@ impl WeightLoader {
         );
         if self.large {
             ensure!(
-                available_memory()? > RESERVE,
-                "memory headroom fell below 16 GiB; stopping weight load"
+                available_memory()? > self.reserve_bytes,
+                "memory headroom fell below {} MiB; stopping weight load",
+                self.reserve_bytes / (1024 * 1024)
             );
         }
         let out = Tensor::zeros(shape.elem_count(), dtype, device)?;
@@ -608,6 +594,7 @@ impl SimpleBackend for WeightLoader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
     struct Directory(PathBuf);
@@ -651,7 +638,7 @@ mod tests {
         candle_core::safetensors::save(&weights, dir.0.join("model.safetensors"))?;
         drop(weights);
         let loader = WeightLoader::open(&dir.0)?;
-        assert!(loader.lease_and_check(DType::F32)?.is_none());
+        loader.check_memory(DType::F32)?;
         let actual = loader
             .load("large", n.into(), DType::F32, &Device::Cpu)?
             .to_vec1::<f32>()?;

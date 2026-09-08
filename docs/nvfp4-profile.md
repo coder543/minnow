@@ -155,8 +155,8 @@ filter to capture the last one. Export reports with `ncu --import REPORT
 Full-model counters use application-range replay, which reloads one model
 serially without snapshotting its weights. Kernel replay is limited to bounded
 synthetic fixtures because NVIDIA's replay can back up all accessible GPU
-memory. If running the profiler under a different user, also hold the serving
-user's model lease throughout the command. Full decode counter replay stalled
+memory. Stop other inference processes during profiling for controlled timings
+and memory measurements. Full decode counter replay stalled
 and was terminated; the whole-response findings use the valid Systems capture,
 with Compute results explicitly restricted to fixtures.
 

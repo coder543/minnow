@@ -17,7 +17,6 @@ candle-nn = "0.11"
 clap = { version = "4", features = ["derive"] }
 half = "2"
 libc = "0.2"
-fs2 = "0.4"
 minijinja = { version = "2", features = ["loader", "json", "builtins"] }
 minijinja-contrib = { version = "2", features = ["pycompat"] }
 rand = "0.9"

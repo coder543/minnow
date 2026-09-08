@@ -157,6 +157,6 @@ requests, late admission, and cancellation pass with the new default. Warm/cold
 checks cover their fixed prompts and do not imply universal bitwise invariance
 across different GEMM shapes.
 
-Each full-model run uses the existing single-weight-set lease and bounded
+Full-model runs were sequential, each using one weight copy and bounded
 loading. Flash's peak system-memory growth is 61.5 GiB in this check, including
 weights, K/V, and workspace. No additional checkpoint copy is introduced.

@@ -46,7 +46,8 @@ BF16. Longest exact block-prefix matching chooses the source. A sufficiently
 similar request truncates that slot in place; a divergent request copies the
 shared complete blocks to an empty or LRU slot when the budget permits. The
 similarity threshold affects retention only: nonmatching token blocks are always
-recomputed. There is one inference worker and one resident weight set.
+recomputed. Each server instance has one inference worker and one resident
+weight set.
 
 Replaying the captured conversation sequence gave:
 

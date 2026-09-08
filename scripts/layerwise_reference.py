@@ -2,7 +2,7 @@
 """Real reference forward with only ONE transformer layer resident at a time.
 
 Uses the checkpoint's actual classes, but never constructs a complete model.
-The process shares the Rust runtime's exclusive model lock.
+Run benchmarks separately from serving so memory and timings are controlled.
 """
 import argparse
 import gc
@@ -19,7 +19,7 @@ import torch
 from safetensors.torch import save_file
 from transformers import AutoConfig, AutoTokenizer
 from transformers.dynamic_module_utils import get_class_from_dynamic_module
-from weight_io import ModelLease, WeightReader
+from weight_io import WeightReader
 
 
 def run(args):
@@ -28,7 +28,6 @@ def run(args):
     dtype = getattr(torch, args.dtype)
     code_model = getattr(args, 'code_model', None) or args.model
     source = str(code_model.resolve())
-    lease = ModelLease()
     reader = WeightReader(args.model)
     try:
         config = AutoConfig.from_pretrained(source, trust_remote_code=True)
@@ -116,7 +115,6 @@ def run(args):
         print(json.dumps(metadata, indent=2))
     finally:
         reader.close()
-        lease.close()
 
 
 if __name__ == '__main__':

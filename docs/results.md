@@ -24,8 +24,8 @@ The benchmark used bounded direct reads into final tensor allocations.
 
 Memory figures are the guard's net whole-system growth from its baseline, using
 `MemAvailable`; unrelated allocations and cache reclamation can affect them.
-Weight ownership is enforced separately by streaming directly into final buffers,
-sharing packed expert views, and holding an exclusive cross-process model lock.
+Weight ownership is enforced separately by streaming directly into final buffers
+and sharing packed expert views within each instance.
 "Mini" has about 16.26 billion total MoE parameters. Sparse activation reduces
 computation, but the resident unquantized weight set still occupies 30.28 GiB.
 
@@ -118,7 +118,5 @@ The arithmetic response used 22 forwards and processed 704 token positions.
 HTTP checks passed for health/model listing, chat and raw completions, token
 usage/template agreement, and rejection of invalid model, streaming, context
 overflow, empty prompts, unknown fields, and mixed prompt/messages requests.
-An explicit cross-language lock check confirms that a Python-held model lease
-rejects a Rust load before any weights are allocated.
 CPU and CUDA-feature test suites and Clippy pass; the two explicit CUDA kernel
 tests also pass. Validation servers are stopped after the checks.
