@@ -4,7 +4,7 @@ use candle_core::{D, DType, Device, Module, Tensor};
 use candle_nn::{Linear, VarBuilder};
 #[cfg(feature = "cuda")]
 use std::collections::BTreeSet;
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 struct Norm {
     weight: Tensor,
@@ -71,8 +71,38 @@ struct Moe {
     device_bias: Tensor,
     experts: Vec<Mlp>,
     shared: Option<Mlp>,
-    #[cfg(feature = "cuda")]
-    packed: Vec<Tensor>,
+    packed: Vec<ExpertProjection>,
+}
+
+enum ExpertProjection {
+    Float(Tensor),
+    Quantized(crate::quant::Weights),
+}
+impl ExpertProjection {
+    fn float(&self) -> &Tensor {
+        match self {
+            Self::Float(t) => t,
+            Self::Quantized(_) => unreachable!("quantized projection in floating execution"),
+        }
+    }
+    fn grouped(&self, x: &Tensor, segments: &[(usize, usize)]) -> Result<Tensor> {
+        match self {
+            Self::Quantized(w) => w.grouped(x, segments),
+            Self::Float(w) => {
+                #[cfg(feature = "cuda")]
+                if x.device().is_cuda() && x.dtype() == DType::BF16 {
+                    return Ok(crate::cuda::grouped_expert_gemm(x, w, segments)?);
+                }
+                let mut row = 0;
+                let mut outputs = Vec::new();
+                for &(e, n) in segments {
+                    outputs.push(x.narrow(0, row, n)?.matmul(&w.get(e)?.t()?)?);
+                    row += n;
+                }
+                Ok(Tensor::cat(&outputs, 0)?)
+            }
+        }
+    }
 }
 
 struct MoeExecution {
@@ -148,7 +178,7 @@ pub fn route(scores: &[Vec<f32>], bias: &[f32], c: &Config) -> Result<(Vec<u32>,
 }
 
 impl Moe {
-    fn load(c: &Config, vb: VarBuilder<'_>) -> Result<Self> {
+    fn load(c: &Config, vb: VarBuilder<'_>, loader: &crate::weights::WeightLoader) -> Result<Self> {
         // The streaming backend writes experts into their final packed storage.
         let mut packed = Vec::new();
         for (name, shape) in [
@@ -156,17 +186,33 @@ impl Moe {
             ("up_proj", (c.moe_intermediate_size, c.hidden_size)),
             ("down_proj", (c.hidden_size, c.moe_intermediate_size)),
         ] {
-            packed.push(vb.get(
-                (c.num_experts, shape.0, shape.1),
-                &format!("experts.{name}.weight"),
-            )?);
+            let shape = (c.num_experts, shape.0, shape.1);
+            let name = format!("experts.{name}.weight");
+            packed.push(
+                match loader.quantized_experts(
+                    &format!("{}.{}", vb.prefix(), name),
+                    shape,
+                    vb.device(),
+                )? {
+                    Some(weight) => ExpertProjection::Quantized(weight),
+                    None => ExpertProjection::Float(vb.get(shape, &name)?),
+                },
+            );
         }
-        let experts = (0..c.num_experts)
+        let count = if packed
+            .iter()
+            .all(|p| matches!(p, ExpertProjection::Float(_)))
+        {
+            c.num_experts
+        } else {
+            0
+        };
+        let experts = (0..count)
             .map(|e| {
                 Ok(Mlp {
-                    gate: Linear::new(packed[0].get(e)?, None),
-                    up: Linear::new(packed[1].get(e)?, None),
-                    down: Linear::new(packed[2].get(e)?, None),
+                    gate: Linear::new(packed[0].float().get(e)?, None),
+                    up: Linear::new(packed[1].float().get(e)?, None),
+                    down: Linear::new(packed[2].float().get(e)?, None),
                 })
             })
             .collect::<Result<_>>()?;
@@ -186,7 +232,6 @@ impl Moe {
             device_bias: Tensor::from_slice(&bias, c.num_experts, vb.device())?,
             bias,
             experts,
-            #[cfg(feature = "cuda")]
             packed,
             shared: if c.num_shared_experts > 0 {
                 Some(Mlp::load(
@@ -208,10 +253,13 @@ impl Moe {
         execution: &MoeExecution,
     ) -> Result<Tensor> {
         let fused = execution.fused_activation;
+        let quantized = self.experts.is_empty();
+        record(trace, format!("{name}.router_input"), x);
         let logits = self.gate.forward(&x.to_dtype(DType::F32)?)?;
         record(trace, format!("{name}.router_logits"), &logits);
         #[cfg(feature = "cuda")]
         if execution.device_routing
+            && !quantized
             && execution.batched_experts
             && execution.fused_mix
             && x.device().is_cuda()
@@ -230,10 +278,11 @@ impl Moe {
             if trace.is_some() {
                 record(trace, format!("{name}.router_ids"), &plan.expert_ids()?);
             }
-            let gate = crate::cuda::routed_expert_gemm(x, &self.packed[0], &plan, false)?;
-            let up = crate::cuda::routed_expert_gemm(x, &self.packed[1], &plan, false)?;
+            let gate = crate::cuda::routed_expert_gemm(x, self.packed[0].float(), &plan, false)?;
+            let up = crate::cuda::routed_expert_gemm(x, self.packed[1].float(), &plan, false)?;
             let hidden = silu_mul(&gate, &up, fused)?;
-            let experts = crate::cuda::routed_expert_gemm(&hidden, &self.packed[2], &plan, true)?;
+            let experts =
+                crate::cuda::routed_expert_gemm(&hidden, self.packed[2].float(), &plan, true)?;
             let mut out = crate::cuda::mix_routed_experts(&experts, &plan)?;
             if let Some(shared) = &self.shared {
                 out = (out + shared.forward(x, fused)?)?;
@@ -252,6 +301,7 @@ impl Moe {
         // Batch each distinct expert once, with all block rows sharing its weights.
         #[cfg(feature = "cuda")]
         if execution.batched_experts
+            && !quantized
             && !execution.compact_decode_experts
             && x.device().is_cuda()
             && x.dtype() == DType::BF16
@@ -263,10 +313,10 @@ impl Moe {
                 .collect::<BTreeSet<_>>()
                 .into_iter()
                 .collect();
-            let gate = crate::cuda::expert_gemm(x, &self.packed[0], &selected, false)?;
-            let up = crate::cuda::expert_gemm(x, &self.packed[1], &selected, false)?;
+            let gate = crate::cuda::expert_gemm(x, self.packed[0].float(), &selected, false)?;
+            let up = crate::cuda::expert_gemm(x, self.packed[1].float(), &selected, false)?;
             let hidden = silu_mul(&gate, &up, fused)?;
-            let out = crate::cuda::expert_gemm(&hidden, &self.packed[2], &selected, true)?
+            let out = crate::cuda::expert_gemm(&hidden, self.packed[2].float(), &selected, true)?
                 .flatten_to(1)?;
             let mut mapping = vec![0; c.num_experts];
             for (i, &e) in selected.iter().enumerate() {
@@ -310,6 +360,23 @@ impl Moe {
             }
         }
         let selected = x.index_select(&Tensor::from_vec(token_ids, ids.len(), x.device())?, 0)?;
+        if quantized {
+            let gate = self.packed[0].grouped(&selected, &segments)?;
+            let up = self.packed[1].grouped(&selected, &segments)?;
+            let hidden = silu_mul(&gate, &up, fused)?;
+            let output = self.packed[2].grouped(&hidden, &segments)?;
+            let mut output = mix_experts(
+                &output,
+                inverse,
+                weights,
+                c.num_experts_per_tok,
+                execution.fused_mix,
+            )?;
+            if let Some(shared) = &self.shared {
+                output = (output + shared.forward(x, fused)?)?;
+            }
+            return Ok(output);
+        }
         let evaluate_serial = || -> Result<Tensor> {
             let mut outputs = Vec::new();
             let mut row = 0;
@@ -322,10 +389,12 @@ impl Moe {
         #[cfg(feature = "cuda")]
         let outputs =
             if execution.batched_experts && x.device().is_cuda() && x.dtype() == DType::BF16 {
-                let gate = crate::cuda::grouped_expert_gemm(&selected, &self.packed[0], &segments)?;
-                let up = crate::cuda::grouped_expert_gemm(&selected, &self.packed[1], &segments)?;
+                let gate =
+                    crate::cuda::grouped_expert_gemm(&selected, self.packed[0].float(), &segments)?;
+                let up =
+                    crate::cuda::grouped_expert_gemm(&selected, self.packed[1].float(), &segments)?;
                 let hidden = silu_mul(&gate, &up, fused)?;
-                crate::cuda::grouped_expert_gemm(&hidden, &self.packed[2], &segments)?
+                crate::cuda::grouped_expert_gemm(&hidden, self.packed[2].float(), &segments)?
             } else {
                 evaluate_serial()?
             };
@@ -344,6 +413,10 @@ impl Moe {
         Ok(y)
     }
 }
+
+#[cfg(test)]
+#[path = "model/cache_tests.rs"]
+mod cache_tests;
 
 enum FeedForward {
     Dense(Mlp),
@@ -364,12 +437,24 @@ pub struct Cache {
     layers: Vec<Option<(Tensor, Tensor)>>,
     len: usize,
     capacity: usize,
+    block_size: usize,
+    committed_tokens: Vec<u32>,
     staged_tokens: Option<Vec<u32>>,
     rope: Option<(usize, usize, Tensor, Tensor)>,
     pub forwards: usize,
     pub processed_tokens: usize,
 }
 impl Cache {
+    fn copy_heads(source: &Tensor, target: &Tensor, len: usize) -> Result<()> {
+        // Each head's prefix is contiguous even when the full prefix view has
+        // a capacity-sized stride. Copy those views directly, without packing.
+        for head in 0..source.dim(0)? {
+            target
+                .get(head)?
+                .slice_set(&source.get(head)?.narrow(0, 0, len)?, 0, 0)?;
+        }
+        Ok(())
+    }
     pub fn new(c: &Config, capacity: usize) -> Result<Self> {
         ensure!(
             capacity > 0
@@ -381,6 +466,8 @@ impl Cache {
             layers: vec![None; c.num_hidden_layers],
             len: 0,
             capacity,
+            block_size: c.block_size,
+            committed_tokens: Vec::new(),
             staged_tokens: None,
             rope: None,
             forwards: 0,
@@ -393,6 +480,79 @@ impl Cache {
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
+    pub fn tokens(&self) -> &[u32] {
+        &self.committed_tokens
+    }
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+    /// A block is bidirectional, so partial-block K/V cannot be retained.
+    pub fn truncate(&mut self, len: usize) -> Result<()> {
+        ensure!(
+            len <= self.len && len.is_multiple_of(self.block_size),
+            "cache truncation requires a committed block boundary"
+        );
+        self.len = len;
+        self.committed_tokens.truncate(len);
+        self.staged_tokens = None;
+        self.rope = None;
+        self.forwards = 0;
+        self.processed_tokens = 0;
+        Ok(())
+    }
+    #[cfg(test)]
+    pub(crate) fn reserve(&mut self, c: &Config, capacity: usize) -> Result<()> {
+        self.resize(c, capacity.max(self.capacity))
+    }
+    pub(crate) fn resize(&mut self, c: &Config, capacity: usize) -> Result<()> {
+        ensure!(
+            capacity >= self.len
+                && capacity <= c.max_position_embeddings
+                && capacity.is_multiple_of(c.block_size),
+            "invalid cache capacity"
+        );
+        if capacity == self.capacity {
+            return Ok(());
+        }
+        // Replace one layer at a time. Peak growth is at most one layer above
+        // the new cache size; never duplicate the full K/V pool or the weights.
+        for layer in &mut self.layers {
+            if let Some((k, v)) = layer.take() {
+                let shape = (c.num_key_value_heads, capacity, c.head_dim);
+                let next_k = Tensor::zeros(shape, k.dtype(), k.device())?;
+                let next_v = Tensor::zeros(shape, v.dtype(), v.device())?;
+                if self.len > 0 {
+                    Self::copy_heads(&k, &next_k, self.len)?;
+                    Self::copy_heads(&v, &next_v, self.len)?;
+                }
+                *layer = Some((next_k, next_v));
+            }
+        }
+        self.capacity = capacity;
+        Ok(())
+    }
+    pub(crate) fn copy_prefix(&self, c: &Config, len: usize, capacity: usize) -> Result<Self> {
+        ensure!(
+            len <= self.len && len <= capacity && len.is_multiple_of(c.block_size),
+            "cache copy requires a committed block boundary"
+        );
+        let mut dest = Self::new(c, capacity)?;
+        if len > 0 {
+            for (source, target) in self.layers.iter().zip(&mut dest.layers) {
+                let (k, v) = source.as_ref().context("missing committed K/V layer")?;
+                let shape = (c.num_key_value_heads, capacity, c.head_dim);
+                let next_k = Tensor::zeros(shape, k.dtype(), k.device())?;
+                let next_v = Tensor::zeros(shape, v.dtype(), v.device())?;
+                Self::copy_heads(k, &next_k, len)?;
+                Self::copy_heads(v, &next_v, len)?;
+                *target = Some((next_k, next_v));
+            }
+        }
+        dest.len = len;
+        dest.committed_tokens
+            .extend_from_slice(&self.committed_tokens[..len]);
+        Ok(dest)
+    }
     pub(crate) fn staged_matches(&self, tokens: &[u32]) -> bool {
         self.staged_tokens.as_deref() == Some(tokens)
     }
@@ -402,12 +562,17 @@ impl Cache {
             "cache commit requires a successful forward of the exact final tokens"
         );
         self.len += tokens.len();
+        self.committed_tokens.extend_from_slice(tokens);
         self.staged_tokens = None;
         Ok(())
     }
 }
 
 pub type Trace = HashMap<String, Tensor>;
+
+#[path = "model/batching.rs"]
+mod batching;
+pub use batching::Forward;
 
 // Bound each attention tile independently of the transformer prefill batch.
 pub const MAX_ATTENTION_ELEMENTS: usize = 128 * 1024 * 1024;
@@ -420,6 +585,7 @@ fn record(trace: &mut Option<&mut Trace>, name: String, tensor: &Tensor) {
 }
 
 pub struct Model {
+    pub(crate) cache_identity: Arc<()>,
     pub config: Config,
     embeddings: Tensor,
     layers: Vec<Layer>,
@@ -432,14 +598,43 @@ pub struct Model {
     fused_qkv: bool,
     prefill_chunk_tokens: usize,
     attention_chunk_tokens: usize,
+    // Drop after weight fields and before releasing the cross-process lease.
+    #[cfg(feature = "cuda")]
+    workspace_cache: Option<crate::cuda::workspace::WorkspaceCache>,
     _lease: Option<crate::weights::ModelLease>,
+}
+impl Drop for Model {
+    fn drop(&mut self) {
+        // cudarc's asynchronous CudaSlice destructor frees on the current
+        // context. A model can be moved to an idle worker and dropped before
+        // that thread has ever submitted CUDA work; bind before fields drop.
+        #[cfg(feature = "cuda")]
+        if let Device::Cuda(device) = &self.device
+            && let Err(error) = device.cuda_stream().context().bind_to_thread()
+        {
+            tracing::warn!(%error,"binding CUDA context before model destruction");
+        }
+    }
 }
 impl Model {
     pub fn load(path: &Path, dtype: DType, device: &Device) -> Result<Self> {
         let c = Config::load(path)?;
-        let loader = crate::weights::WeightLoader::open(path)?;
+        let loader = Arc::new(crate::weights::WeightLoader::open(path)?);
+        ensure!(
+            !device.is_cuda()
+                || dtype == DType::BF16
+                || !loader
+                    .inventory()
+                    .iter()
+                    .any(|(_, _, encoding)| encoding.quantized()),
+            "quantized CUDA execution requires BF16 activations; use --dtype bf16"
+        );
         let lease = loader.lease_and_check(dtype)?;
-        let vb = VarBuilder::from_backend(Box::new(loader), dtype, device.clone());
+        let vb = VarBuilder::from_backend(
+            Box::new(crate::weights::SharedLoader(loader.clone())),
+            dtype,
+            device.clone(),
+        );
         let embeddings = vb.get(
             (c.vocab_size, c.hidden_size),
             "model.word_embeddings.weight",
@@ -486,13 +681,14 @@ impl Model {
                 mlp: if i < c.first_k_dense_replace {
                     FeedForward::Dense(Mlp::load(c.hidden_size, c.intermediate_size, v.pp("mlp"))?)
                 } else {
-                    FeedForward::Sparse(Moe::load(&c, v.pp("mlp"))?)
+                    FeedForward::Sparse(Moe::load(&c, v.pp("mlp"), &loader)?)
                 },
             });
         }
         let norm = Norm::load(c.hidden_size, c.rms_norm_eps, vb.pp("model.norm"))?;
         let head = candle_nn::linear_no_bias(c.hidden_size, c.vocab_size, vb.pp("lm_head"))?;
         Ok(Self {
+            cache_identity: Arc::new(()),
             config: c,
             embeddings,
             layers,
@@ -511,12 +707,37 @@ impl Model {
             fused_qkv: true,
             prefill_chunk_tokens: 4096,
             attention_chunk_tokens: 1024,
+            #[cfg(feature = "cuda")]
+            workspace_cache: crate::cuda::workspace::WorkspaceCache::new(device),
             _lease: lease,
         })
     }
 
     pub fn device(&self) -> &Device {
         &self.device
+    }
+    pub fn set_workspace_cache_mib(&self, mib: usize) -> Result<()> {
+        let _bytes = mib
+            .checked_mul(1024 * 1024)
+            .context("workspace cache size overflow")?;
+        #[cfg(feature = "cuda")]
+        if let Some(cache) = &self.workspace_cache {
+            cache.set(_bytes as u64)?;
+        }
+        Ok(())
+    }
+    fn refresh_workspace_cache(&self) -> Result<()> {
+        #[cfg(feature = "cuda")]
+        if let Some(cache) = &self.workspace_cache {
+            cache.refresh()?;
+        }
+        Ok(())
+    }
+    pub fn kv_bytes_per_token(&self) -> usize {
+        2 * self.config.num_hidden_layers
+            * self.config.num_key_value_heads
+            * self.config.head_dim
+            * self.dtype.size_in_bytes()
     }
     pub fn set_batched_experts(&mut self, enabled: bool) {
         self.moe_execution.batched_experts = enabled;
@@ -626,7 +847,7 @@ impl Model {
         if self.fused_qkv
             && self.device.is_cuda()
             && self.dtype == DType::BF16
-            && c.num_attention_heads == 16
+            && [16, 32].contains(&c.num_attention_heads)
             && c.num_key_value_heads == 4
             && c.head_dim == 128
             && c.rotary_dim() == 64
@@ -643,9 +864,9 @@ impl Model {
                 c.rms_norm_eps,
             )?;
             return Ok((
-                heads.narrow(0, 0, 16)?,
-                heads.narrow(0, 16, 4)?,
-                heads.narrow(0, 20, 4)?,
+                heads.narrow(0, 0, c.num_attention_heads)?,
+                heads.narrow(0, c.num_attention_heads, 4)?,
+                heads.narrow(0, c.num_attention_heads + 4, 4)?,
             ));
         }
         let mut q = qkv.narrow(1, 0, c.num_attention_heads)?.transpose(0, 1)?;
@@ -741,7 +962,7 @@ impl Model {
             let probs = if self.fused_attention
                 && self.device.is_cuda()
                 && self.dtype == DType::BF16
-                && total <= 8192
+                && total <= 131072
             {
                 crate::cuda::block_softmax(
                     &raw_scores,
@@ -807,6 +1028,7 @@ impl Model {
         let (_, _, cos, sin) = cache.rope.as_ref().unwrap();
         let (cos, sin) = (cos.clone(), sin.clone());
         for (i, layer) in self.layers.iter().enumerate() {
+            self.refresh_workspace_cache()?;
             let h = layer.input_norm.forward(&x)?;
             let qkv = layer.qkv.forward(&h)?.reshape((
                 n,

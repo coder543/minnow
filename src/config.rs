@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::Path};
+use std::path::Path;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -46,9 +46,19 @@ fn rope_theta() -> f64 {
 }
 
 impl Config {
+    pub fn model_family(&self) -> &'static str {
+        if self.hidden_size == 4096 && self.num_hidden_layers == 32 {
+            "LLaDA2.2-flash"
+        } else {
+            "LLaDA2.2-mini"
+        }
+    }
     pub fn load(path: &Path) -> Result<Self> {
-        let mut c: Self = serde_json::from_slice(&fs::read(path.join("config.json"))?)
-            .context("reading LLaDA2.2 configuration")?;
+        Self::from_json(crate::container::asset(path, "config.json")?.as_bytes())
+    }
+    pub fn from_json(bytes: &[u8]) -> Result<Self> {
+        let mut c: Self =
+            serde_json::from_slice(bytes).context("reading LLaDA2.2 configuration")?;
         if let Some(p) = &c.rope_parameters {
             ensure!(
                 p["rope_type"] == "default",

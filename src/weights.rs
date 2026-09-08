@@ -1,5 +1,6 @@
 //! Bounded checkpoint loading: direct reads into an 8 MiB staging buffer and
 //! copies into the final allocation. No checkpoint mmap or complete host copy.
+use crate::container::{Container, Encoding, Region};
 use anyhow::{Context, Result, bail, ensure};
 use candle_core::{DType, Device, Shape, Tensor};
 use candle_nn::{Init, var_builder::SimpleBackend};
@@ -69,16 +70,20 @@ struct Location {
     bytes: usize,
     shape: Vec<usize>,
     dtype: DType,
+    encoding: Encoding,
+    checksum: Option<String>,
+    scales: Option<Region>,
+    group_size: usize,
 }
 
 // O_DIRECT needs alignment that Vec<u8> does not guarantee. This is an ordinary
 // aligned staging allocation; the loader never maps checkpoint files.
-struct Staging {
+pub(crate) struct Staging {
     pointer: std::ptr::NonNull<u8>,
     len: usize,
 }
 impl Staging {
-    fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let len = STAGING_BYTES + 2 * ALIGN;
         let layout = std::alloc::Layout::from_size_align(len, ALIGN)?;
         // SAFETY: valid nonempty layout, released with this layout in Drop.
@@ -88,7 +93,7 @@ impl Staging {
             len,
         })
     }
-    fn bytes(&mut self) -> &mut [u8] {
+    pub(crate) fn bytes(&mut self) -> &mut [u8] {
         // SAFETY: exclusive access to the live allocation of self.len bytes.
         unsafe { std::slice::from_raw_parts_mut(self.pointer.as_ptr(), self.len) }
     }
@@ -113,8 +118,31 @@ pub struct WeightLoader {
     large: bool,
     pub elements: u64,
 }
+
+pub(crate) struct SharedLoader(pub std::sync::Arc<WeightLoader>);
+impl SimpleBackend for SharedLoader {
+    fn get(
+        &self,
+        s: Shape,
+        name: &str,
+        h: Init,
+        dtype: DType,
+        dev: &Device,
+    ) -> candle_core::Result<Tensor> {
+        self.0.get(s, name, h, dtype, dev)
+    }
+    fn get_unchecked(&self, name: &str, dtype: DType, dev: &Device) -> candle_core::Result<Tensor> {
+        self.0.get_unchecked(name, dtype, dev)
+    }
+    fn contains_tensor(&self, name: &str) -> bool {
+        self.0.contains_tensor(name)
+    }
+}
 impl WeightLoader {
     pub fn open(path: &Path) -> Result<Self> {
+        if path.is_file() {
+            return Self::open_container(path);
+        }
         #[derive(Deserialize)]
         struct Index {
             weight_map: HashMap<String, String>,
@@ -210,7 +238,11 @@ impl WeightLoader {
                                 offset: 8 + header_len + begin as u64,
                                 bytes,
                                 shape: info.shape,
-                                dtype
+                                dtype,
+                                encoding: Encoding::from_dtype(dtype)?,
+                                checksum: None,
+                                scales: None,
+                                group_size: 0,
                             }
                         )
                         .is_none(),
@@ -227,15 +259,143 @@ impl WeightLoader {
             elements,
         })
     }
+    fn open_container(path: &Path) -> Result<Self> {
+        let container = Container::open(path)?;
+        let mut tensors = HashMap::new();
+        let mut elements = 0;
+        for (name, info) in &container.manifest.tensors {
+            elements += info.elements()? as u64;
+            tensors.insert(
+                name.clone(),
+                Location {
+                    file: 0,
+                    offset: info.data.offset,
+                    bytes: info.data.bytes as usize,
+                    shape: info.shape.clone(),
+                    dtype: if info.encoding.quantized() {
+                        DType::U8
+                    } else {
+                        info.encoding.float_dtype()?
+                    },
+                    encoding: info.encoding,
+                    checksum: Some(info.data.blake3.clone()),
+                    scales: info.scales.clone(),
+                    group_size: info.group_size,
+                },
+            );
+        }
+        Ok(Self {
+            files: vec![
+                OpenOptions::new()
+                    .read(true)
+                    .custom_flags(libc::O_DIRECT)
+                    .open(path)?,
+            ],
+            large: container.manifest.weight_bytes() > LARGE_MODEL,
+            tensors,
+            staging: Mutex::new(Staging::new()?),
+            elements,
+        })
+    }
+    /// Metadata only; no tensor bytes are loaded by an inventory operation.
+    pub fn inventory(&self) -> Vec<(String, Vec<usize>, Encoding)> {
+        let mut entries: Vec<_> = self
+            .tensors
+            .iter()
+            .map(|(name, t)| (name.clone(), t.shape.clone(), t.encoding))
+            .collect();
+        entries.sort_by(|a, b| a.0.cmp(&b.0));
+        entries
+    }
+    fn visit(
+        &self,
+        name: &str,
+        part: &Location,
+        mut consume: impl FnMut(&[u8]) -> Result<()>,
+    ) -> Result<()> {
+        let mut staging = self
+            .staging
+            .lock()
+            .map_err(|_| anyhow::anyhow!("weight staging lock poisoned"))?;
+        let mut copied = 0;
+        let mut hash = blake3::Hasher::new();
+        while copied < part.bytes {
+            let bytes = (part.bytes - copied).min(STAGING_BYTES);
+            let offset = part.offset + copied as u64;
+            let aligned = offset / ALIGN as u64 * ALIGN as u64;
+            let skip = (offset - aligned) as usize;
+            let requested = (skip + bytes).div_ceil(ALIGN) * ALIGN;
+            let buffer = &mut staging.bytes()[..requested];
+            let got = loop {
+                match self.files[part.file].read_at(buffer, aligned) {
+                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                    result => break result.with_context(|| format!("direct read of {name}"))?,
+                }
+            };
+            ensure!(got >= skip + bytes, "short direct read for {name}");
+            let bytes = &buffer[skip..skip + bytes];
+            if part.checksum.is_some() {
+                hash.update(bytes);
+            }
+            consume(bytes)?;
+            copied += bytes.len();
+        }
+        if let Some(expected) = &part.checksum {
+            ensure!(
+                hash.finalize()
+                    .to_hex()
+                    .as_str()
+                    .eq_ignore_ascii_case(expected),
+                "tensor checksum mismatch: {name}"
+            );
+        }
+        Ok(())
+    }
+    /// Bounded raw traversal for conversion, with payload verification for .mnw.
+    pub fn visit_tensor(&self, name: &str, consume: impl FnMut(&[u8]) -> Result<()>) -> Result<()> {
+        self.visit(
+            name,
+            self.tensors.get(name).context("missing tensor")?,
+            consume,
+        )
+    }
+    pub fn quantization_group(&self, name: &str) -> Result<usize> {
+        Ok(self.tensors.get(name).context("missing tensor")?.group_size)
+    }
+    /// Bounded traversal of the separate scale region, including its checksum.
+    pub fn visit_scales(&self, name: &str, consume: impl FnMut(&[u8]) -> Result<()>) -> Result<()> {
+        let part = self.tensors.get(name).context("missing tensor")?;
+        let region = part
+            .scales
+            .as_ref()
+            .context("missing quantization scales")?;
+        let location = Location {
+            offset: region.offset,
+            bytes: region.bytes as usize,
+            checksum: Some(region.blake3.clone()),
+            dtype: DType::F16,
+            ..part.clone()
+        };
+        self.visit(name, &location, consume)
+    }
     pub fn lease_and_check(&self, dtype: DType) -> Result<Option<ModelLease>> {
         if !self.large {
             return Ok(None);
         }
         let lease = ModelLease::acquire()?;
-        let required = self
-            .elements
-            .checked_mul(dtype.size_in_bytes() as u64)
-            .context("model size overflow")?;
+        let required = self.tensors.iter().try_fold(0u64, |sum, (name, t)| {
+            let bytes = if t.encoding.quantized() {
+                t.bytes as u64 + t.scales.as_ref().map_or(0, |s| s.bytes)
+            } else {
+                let size = if name.ends_with(".gate.weight") {
+                    4
+                } else {
+                    dtype.size_in_bytes()
+                };
+                t.bytes as u64 / t.dtype.size_in_bytes() as u64 * size as u64
+            };
+            sum.checked_add(bytes).context("model size overflow")
+        })?;
         let available = available_memory()?;
         ensure!(
             available >= required + RESERVE,
@@ -276,8 +436,87 @@ impl WeightLoader {
             })
             .collect()
     }
+    pub(crate) fn quantized_experts(
+        &self,
+        name: &str,
+        shape: (usize, usize, usize),
+        device: &Device,
+    ) -> Result<Option<crate::quant::Weights>> {
+        let parts = self.parts(name, &shape.into())?;
+        if parts.iter().all(|t| !t.encoding.quantized()) {
+            return Ok(None);
+        }
+        let first = &parts[0];
+        ensure!(
+            parts
+                .iter()
+                .all(|t| t.encoding == first.encoding && t.group_size == first.group_size),
+            "all experts within one projection must use the same encoding and group size: {name}"
+        );
+        let encoding = first.encoding;
+        let group_size = first.group_size;
+        let count = shape.0 * shape.1 * shape.2;
+        let codes = Tensor::zeros(
+            if encoding.int8() { count } else { count / 2 },
+            DType::U8,
+            device,
+        )?;
+        let scales = Tensor::zeros(count / group_size, DType::F16, device)?;
+        let mut code_offset = 0;
+        let mut scale_offset = 0;
+        for part in parts {
+            self.visit(name, &part, |bytes| {
+                let chunk = Tensor::from_raw_buffer(bytes, DType::U8, &[bytes.len()], device)?;
+                codes.slice_set(&chunk, 0, code_offset)?;
+                device.synchronize()?;
+                code_offset += bytes.len();
+                Ok(())
+            })?;
+            let region = part
+                .scales
+                .as_ref()
+                .context("missing quantization scales")?;
+            let scale_location = Location {
+                offset: region.offset,
+                bytes: region.bytes as usize,
+                checksum: Some(region.blake3.clone()),
+                dtype: DType::F16,
+                ..part.clone()
+            };
+            self.visit(name, &scale_location, |bytes| {
+                // Reject corrupt but checksummed scales before a kernel can use them.
+                for value in bytes.as_chunks::<2>().0.iter() {
+                    let value = half::f16::from_bits(u16::from_le_bytes(*value));
+                    ensure!(
+                        value.is_finite() && value.to_f32() > 0.,
+                        "invalid scale in {name}"
+                    );
+                }
+                let chunk = Tensor::from_raw_buffer(bytes, DType::F16, &[bytes.len() / 2], device)?;
+                scales.slice_set(&chunk, 0, scale_offset)?;
+                device.synchronize()?;
+                scale_offset += bytes.len() / 2;
+                Ok(())
+            })?;
+        }
+        ensure!(
+            code_offset == codes.elem_count() && scale_offset == scales.elem_count(),
+            "incomplete quantized weight {name}"
+        );
+        Ok(Some(crate::quant::Weights {
+            codes,
+            scales,
+            encoding,
+            group_size,
+            shape,
+        }))
+    }
     fn load(&self, name: &str, shape: Shape, dtype: DType, device: &Device) -> Result<Tensor> {
         let parts = self.parts(name, &shape)?;
+        ensure!(
+            parts.iter().all(|t| !t.encoding.quantized()),
+            "quantized tensor {name} requires a quantized execution path"
+        );
         if self.large {
             ensure!(
                 available_memory()? > RESERVE,
@@ -285,43 +524,23 @@ impl WeightLoader {
             );
         }
         let out = Tensor::zeros(shape.elem_count(), dtype, device)?;
-        let mut staging = self
-            .staging
-            .lock()
-            .map_err(|_| anyhow::anyhow!("weight staging lock poisoned"))?;
         let mut dst = 0;
         for part in parts {
             let item_size = part.dtype.size_in_bytes();
-            let mut copied = 0;
-            while copied < part.bytes {
-                let bytes = (part.bytes - copied).min(STAGING_BYTES);
-                let offset = part.offset + copied as u64;
-                let aligned = offset / ALIGN as u64 * ALIGN as u64;
-                let skip = (offset - aligned) as usize;
-                let requested = (skip + bytes).div_ceil(ALIGN) * ALIGN;
-                let buffer = &mut staging.bytes()[..requested];
-                let got = loop {
-                    match self.files[part.file].read_at(buffer, aligned) {
-                        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                        result => {
-                            break result.with_context(|| format!("direct read of {name}"))?;
-                        }
-                    }
-                };
-                ensure!(got >= skip + bytes, "short direct read for {name}");
+            self.visit(name, &part, |buffer| {
                 let chunk = Tensor::from_raw_buffer(
-                    &buffer[skip..skip + bytes],
+                    buffer,
                     part.dtype,
-                    &[bytes / item_size],
+                    &[buffer.len() / item_size],
                     device,
                 )?
                 .to_dtype(dtype)?;
                 out.slice_set(&chunk, 0, dst)?;
                 // Bound the lifetime of async copies before reusing host staging.
                 device.synchronize()?;
-                copied += bytes;
-                dst += bytes / item_size;
-            }
+                dst += buffer.len() / item_size;
+                Ok(())
+            })?;
         }
         ensure!(dst == shape.elem_count(), "incomplete weight {name}");
         Ok(out.reshape(shape)?)

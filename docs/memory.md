@@ -21,7 +21,16 @@ I/O fallback for weights: a filesystem without direct-I/O support fails clearly.
 Loading checks available system memory before reserving the weight set and keeps
 16 GiB of system headroom. Validation commands additionally run under
 `scripts/memory_guard.py`, which observes total system memory (including shared
-GB10 GPU memory), aborts on new swap-out activity, and records peak consumption.
+GB10 GPU memory) and records peak consumption. Each run specifies its growth
+budget and available-memory reserve. Brief reserve/growth excursions have a
+one-second grace period; the critical reserve (4 GiB by default) aborts immediately.
+Incidental swap-out is tolerated: the defaults stop after 256 MiB total, or a
+sustained rate above 64 MiB/s. Linux PSI also stops sustained full memory-reclaim
+stalls above 20% for ten seconds, including when swap is disabled. This longer
+stall grace tolerates normal bulk-allocation bursts while reserve and growth
+limits remain in force. Limits and observed pressure
+are recorded in the report; `--help` exposes all thresholds. Use explicit budgets
+appropriate for the model instead of treating these defaults as a RAM-use target.
 The guard's default growth ceiling is for BF16 validation, not a full FP32 model.
 
 The actual LLaDA2.2-mini checkpoint has 32,511,286,784 bytes of BF16 weights
@@ -34,8 +43,13 @@ tokens, the cache is:
 ```
 
 Attention workspaces and CUDA runtime allocations are additional. The server
-defaults to the full 131,072-token request limit and admits one active generation.
-Cache capacity follows each request's block-rounded prompt plus output budget.
+defaults to the full 131,072-token request limit and up to four active generations.
+Cache capacity follows prompt plus output budget, rounded up in 2,048-token
+increments, and grows one layer at a time. Up to four conversation slots share
+an aggregate capacity budget, defaulting to one full context's K/V (5 GiB for
+mini BF16). LRU eviction happens before allocation. A fork copies only the exact
+committed prefix into independent K/V storage; weights remain shared. During
+buffer growth, one old layer's K/V can temporarily remain above that budget.
 Full-prefix diagnostic forwards are not the serving execution path.
 Each attention tile is limited to 128 million score elements before allocation;
 its query count shrinks at long contexts independently of the transformer batch.
@@ -43,6 +57,24 @@ Prefill defaults to 4,096-token batches and 1,024-query attention tiles. Transfo
 batches cannot exceed 8,192 tokens, bounding routed-expert activations separately.
 Attention reads the cache through views, without copying the committed prefix.
 The full 128K serving limit has not been benchmarked.
+
+Active reservations and retained idle prefixes share one budget; bypassing prefix
+reuse does not bypass memory admission. Four parallel requests do not allocate
+four full-context caches. A request waits if its reservation cannot fit alongside
+active work. Flash BF16 K/V costs 8 GiB per full context (32 layers).
+
+The CUDA async allocator may reuse up to `--workspace-cache-mib 2048` of unused
+storage relative to current live allocations. Zero disables retention. The limit
+is refreshed each layer; it is an allowance, not an eager allocation or another
+weight set. Model destruction synchronizes and trims the pool before releasing
+the shared full-model lock. See NVIDIA's [stream-ordered allocator documentation](https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/stream-ordered-memory-allocation.html).
+
+Quantized `.mnw` files use direct reads into final code/scale tensors. Runtime
+quantization never expands a whole model. Expert-only INT8 mini weights occupy
+16.25 GiB, FP4 mini 9.79 GiB, and FP4 flash 57.96 GiB. The first flash FP4
+128-token generation peaked at 59.81 GiB of system growth, with no swap-out,
+under an explicit 72 GiB growth ceiling and 32 GiB reserve. Subsequent benchmark
+reports measure longer prompts/responses separately.
 
 ## Reference validation
 
@@ -77,6 +109,7 @@ then multiplies by the BF16 up-projection. An exhaustive finite-BF16 test verifi
 bitwise equivalence with the explicit FP32 path. Expert gathering, FP32 weighting,
 and reduction are fused with the same binary reduction tree and BF16 result.
 Attention scaling, block masking, and FP32 softmax are fused for key lengths up to
-8,192; longer keys use the bounded eager fallback. Scaled scores still round to
+131,072. Beyond 8,192, a bounded-register kernel rereads BF16 scores, avoiding the
+former eager FP32 intermediates and CPU-built mask. Scaled scores still round to
 BF16 before softmax. The softmax reduction tree differs, allowing a BF16 rounding
-step of numerical difference. RMSNorm retains explicit FP32 intermediates.
+step of numerical difference. RMSNorm keeps FP32 reductions in its fused kernel.

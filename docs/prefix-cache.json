@@ -1,0 +1,64 @@
+{
+  "device": "NVIDIA GB10",
+  "dtype": "BF16",
+  "prefill_chunk_tokens": 4096,
+  "attention_chunk_tokens": 1024,
+  "cold_cache": true,
+  "note": "Captured prompts replayed with one output token; initial dispatch sample excluded at the first length. Prompt bodies and token IDs are not included.",
+  "cold_prefill": [
+    {
+      "prefill_tokens": 7904,
+      "before_tok_s": 6141.29894553392,
+      "after_tok_s": 6328.052831843473,
+      "speedup": 1.0304095091227181,
+      "before_prompt_ms": [
+        1287.024141
+      ],
+      "after_prompt_ms": [
+        1249.041405
+      ]
+    },
+    {
+      "prefill_tokens": 8448,
+      "before_tok_s": 5185.761056415202,
+      "after_tok_s": 5873.247195703201,
+      "speedup": 1.1325718890263028,
+      "before_prompt_ms": [
+        1628.6875320000001,
+        1629.465086
+      ],
+      "after_prompt_ms": [
+        1423.984672,
+        1453.082799
+      ]
+    },
+    {
+      "prefill_tokens": 10240,
+      "before_tok_s": 2425.4068964182798,
+      "after_tok_s": 5558.206220422104,
+      "speedup": 2.2916592793688295,
+      "before_prompt_ms": [
+        4227.178645999999,
+        4216.77816
+      ],
+      "after_prompt_ms": [
+        1832.118725,
+        1852.63752
+      ]
+    },
+    {
+      "prefill_tokens": 18624,
+      "before_tok_s": 906.964889291455,
+      "after_tok_s": 4022.643019338285,
+      "speedup": 4.4352797631238845,
+      "before_prompt_ms": [
+        20504.860375,
+        20564.069481000002
+      ],
+      "after_prompt_ms": [
+        4624.695767,
+        4634.899243
+      ]
+    }
+  ]
+}

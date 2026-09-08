@@ -19,6 +19,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--url', default='http://127.0.0.1:18089')
     p.add_argument('--spawn', action='store_true')
+    p.add_argument('--model', type=Path, help='checkpoint directory or .mnw file for --spawn')
     p.add_argument('--ui-dir', type=Path)
     p.add_argument('--report',type=Path,default=Path('artifacts/api-compatibility.json'))
     args=p.parse_args()
@@ -29,6 +30,7 @@ def main():
             s.bind(('127.0.0.1',0)); port=s.getsockname()[1]
         args.url=f'http://127.0.0.1:{port}'
         command=['target/release/minnow','--prefill-chunk-tokens','128','serve','--listen',f'127.0.0.1:{port}','--threshold','0.5','--editing-threshold','0','--max-post-steps','16']
+        if args.model: command += ['--model',str(args.model)]
         if args.ui_dir: command+=['--ui-dir',str(args.ui_dir)]
         logfile=args.report.with_suffix('.server.log').open('w')
         process=subprocess.Popen(command,stdout=logfile,stderr=subprocess.STDOUT)
@@ -74,7 +76,8 @@ def main():
         assert abs(meta['refinement_steps_per_block']-meta['denoise_forwards']/meta['blocks'])<1e-8
         if meta['prefill_tokens']:
             progress=[e['prompt_progress'] for e in chunks if 'prompt_progress' in e]
-            assert progress[0]['processed']==0 and progress[-1]['processed']==progress[-1]['total']
+            assert progress[0]['processed']==meta['cached_tokens'] and progress[-1]['processed']==progress[-1]['total']
+            assert all(e['cache']==meta['cached_tokens'] for e in progress)
             assert [e['processed'] for e in progress]==sorted(e['processed'] for e in progress)
             final_prefill=max(i for i,e in enumerate(chunks) if 'prompt_progress' in e)
             assert chunks[final_prefill+1]['minnow']['phase']=='prefill_complete'
@@ -105,7 +108,9 @@ def main():
         factual=request('/v1/chat/completions',base)
         streamed=stream(base)
         assert streamed['text']==factual['choices'][0]['message']['content']
-        assert streamed['usage']==factual['usage']
+        for key in ['prompt_tokens','completion_tokens','total_tokens']:
+            assert streamed['usage'][key]==factual['usage'][key]
+        assert streamed['usage']['prompt_tokens_details']['cached_tokens']==streamed['final']['minnow']['cached_tokens']
         assert streamed['final']['minnow']['denoise_forwards']==factual['minnow']['denoise_forwards']
         assert '<|' not in streamed['text']
         stopped=stream({**base,'stop':'Paris'})
@@ -149,7 +154,7 @@ def main():
                     if e.get('minnow',{}).get('phase')=='refinement': break
         started=time.monotonic()
         for _ in range(100):
-            if not request('/slots')[0]['is_processing']:break
+            if not any(s['is_processing'] for s in request('/slots')):break
             time.sleep(0.05)
         else:raise AssertionError('disconnected request retained its inference slot')
         report={'url':args.url,'health':health,'props':props,'factual':factual,'streamed':streamed,'stopped':stopped,'override':override,'long':long,'tools':tool_stream,'tool_plain':tool_plain,'tool_followup':followup,'cancel_seconds':time.monotonic()-started}

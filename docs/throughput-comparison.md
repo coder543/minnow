@@ -87,8 +87,9 @@ Every large validation was guarded and sequential, and none caused new swap-out.
 The separate FP32 diagnostic uses one 60.56 GiB weight set under its larger guard.
 Weights still use bounded direct reads and never checkpoint mmap.
 Attention tiles are bounded to 128 million score elements and transformer batches
-to 8,192 tokens. Fused softmax currently supports key lengths up to 8,192; longer
-contexts use the bounded eager fallback. The full 128K path is unbenchmarked.
+to 8,192 tokens. These measurements predate the long-row softmax kernel;
+[prefix caching and long prefill](prefix-cache.md) removes the eager fallback
+above 8,192 keys. The full 128K path is unbenchmarked.
 
 ## Useful generation smoke measurements
 

@@ -8,11 +8,13 @@ fn app() -> (App, mpsc::Receiver<Option<Job>>) {
     (
         App {
             tx,
+            queue: Arc::new(tokio::sync::Semaphore::new(2)),
             healthy: Arc::new(AtomicBool::new(true)),
             stopping: Arc::new(AtomicBool::new(false)),
             codec: Arc::new(TextCodec::fixture()),
             info: Arc::new(Info {
                 model_id: "test".into(),
+                model_family: "LLaDA2.2-mini",
                 model_path: "fixture".into(),
                 max_context: 128,
                 vocab_size: 320,
@@ -24,11 +26,61 @@ fn app() -> (App, mpsc::Receiver<Option<Job>>) {
                     ..Options::default()
                 },
                 ui_dir: None,
+                cache: CacheOptions::default(),
+                cache_budget_bytes: 0,
+                parallel: 4,
+                batch_wait_us: 200,
             }),
-            active: Arc::new(Mutex::new(None)),
+            active: Arc::new(Mutex::new(vec![None; 4])),
+            cache_slots: Arc::new(Mutex::new(vec![])),
+            batch_metrics: Arc::new(batching::Metrics::default()),
         },
         rx,
     )
+}
+
+#[tokio::test]
+async fn scheduler_completes_a_lone_request_without_waiting_for_another_admission() {
+    use candle_core::{DType, Device};
+    let (app, rx) = app();
+    let model = Arc::new(
+        Model::load(
+            std::path::Path::new("tests/fixtures/tiny"),
+            DType::F32,
+            &Device::Cpu,
+        )
+        .unwrap(),
+    );
+    let pool = CachePool::new(&model, 128, CacheOptions::default()).unwrap();
+    let request = request::prepare(
+        json!({"messages":[{"role":"user","content":"hello"}],"max_tokens":0}),
+        Kind::Chat,
+        &app.codec,
+        &app.info,
+    )
+    .unwrap();
+    let (reply, response) = oneshot::channel();
+    let worker = app.clone();
+    let handle = std::thread::spawn(move || batching::run(model, pool, worker, rx));
+    app.tx
+        .send(Some(Job {
+            request,
+            transport: Transport::Json(reply),
+            queued: None,
+        }))
+        .await
+        .unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(5), response).await;
+    app.stopping.store(true, Ordering::Release);
+    let _ = app.tx.try_send(None);
+    assert_eq!(
+        result.unwrap().unwrap().unwrap()["usage"]["completion_tokens"],
+        0
+    );
+    tokio::task::spawn_blocking(move || handle.join().unwrap())
+        .await
+        .unwrap();
+    assert!(app.cache_slots.lock().unwrap().iter().all(|s| !s.busy));
 }
 
 #[test]
@@ -49,6 +101,68 @@ fn defaults_and_partial_request_overrides_compose() {
         body[key] = value;
         assert!(request::prepare(body, Kind::Chat, &app.codec, &app.info).is_err());
     }
+}
+
+#[test]
+fn completion_token_ids_are_validated_before_admission() {
+    let (app, _) = app();
+    let prepare = |prompt| {
+        request::prepare(
+            json!({"prompt":prompt,"max_tokens":1}),
+            Kind::Completion,
+            &app.codec,
+            &app.info,
+        )
+    };
+    assert_eq!(prepare(json!([1, 2, 3])).unwrap().ids, vec![1, 2, 3]);
+    for prompt in [
+        json!([]),
+        json!([-1]),
+        json!([1.5]),
+        json!([[1, 2]]),
+        json!([app.info.vocab_size]),
+    ] {
+        assert!(prepare(prompt).is_err());
+    }
+}
+
+#[test]
+fn model_aliases_follow_the_loaded_family() {
+    let (mut app, _) = app();
+    assert!(app.info.accepts_model("inclusionAI/LLaDA2.2-mini"));
+    assert!(!app.info.accepts_model("minnow-llada2.2-flash"));
+    Arc::get_mut(&mut app.info).unwrap().model_family = "LLaDA2.2-flash";
+    assert!(app.info.accepts_model("test"));
+    assert!(app.info.accepts_model("inclusionAI/LLaDA2.2-flash"));
+    assert!(!app.info.accepts_model("minnow-llada2.2-mini"));
+}
+
+#[tokio::test]
+async fn a_request_waiting_outside_the_channel_still_counts_toward_queue_capacity() {
+    let (app, mut rx) = app();
+    let body =
+        || json!({"messages":[{"role":"user","content":"hello"}],"max_tokens":0,"stream":true});
+    let first = submit(app.clone(), body(), Kind::Chat).await.unwrap();
+    let pending = rx.recv().await.unwrap().unwrap();
+    let second = submit(app.clone(), body(), Kind::Chat).await.unwrap();
+    assert_eq!(
+        health(State(app.clone())).await.unwrap().0["queued_requests"],
+        2
+    );
+    assert_eq!(
+        submit(app.clone(), body(), Kind::Chat)
+            .await
+            .unwrap_err()
+            .status,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    drop(pending);
+    assert_eq!(
+        health(State(app.clone())).await.unwrap().0["queued_requests"],
+        1
+    );
+    let third = submit(app.clone(), body(), Kind::Chat).await.unwrap();
+    drop((first, second, third));
 }
 
 #[test]

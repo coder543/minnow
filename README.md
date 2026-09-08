@@ -1,9 +1,9 @@
 # minnow
 
-A model-specific Rust/Candle inference server for LLaDA2.2-mini. It runs the native
-unquantized BF16 checkpoint on CUDA, with an FP32 path for numerical validation.
-Validated on NVIDIA GB10 with CUDA 13.0. Quantization for RTX 3090 and the larger
-LLaDA2.2-flash checkpoint are future work.
+A model-specific Rust/Candle inference server for LLaDA2.2-mini and LLaDA2.2-flash.
+It supports BF16 weights, mixed expert-only INT8/FP4 quantization, an FP32 diagnostic
+path, and continuous batching. Validated on NVIDIA GB10 with CUDA 13.0; RTX 3090
+has not yet been hardware-tested.
 
 Minnow keeps committed-prefix K/V resident and evaluates only the current 32-token
 block during refinement. It supports the reference's block-capacity MoE routing,
@@ -26,6 +26,12 @@ transformer batches are limited to 8,192 tokens to bound expert activations.
 Requires Rust, Linux with direct I/O, and CUDA 13.0 or later with a GPU supporting BF16
 (Ampere or later). The CUDA build uses `nvcc`; set `NVCC` if it is not on PATH.
 The CPU build is useful for small FP32 fixtures.
+
+`MINNOW_CUDA_ARCH` selects the PTX target for minnow's custom kernels, defaulting
+to `compute_80`. For a GB10-specific build, use
+`MINNOW_CUDA_ARCH=compute_121 cargo build --release --features cuda`.
+This does not change Candle's independently built kernels or cuBLAS's GEMMs.
+Changing the variable triggers a rebuild; newer targets require compatible GPUs.
 
 ```sh
 cargo build --release --features cuda
@@ -52,10 +58,20 @@ runtime/reference loads. BF16 weights occupy 30.28 GiB; FP32 weights occupy
 
 ## HTTP interface
 
-The default listener is `127.0.0.1:8080`, with one active inference request, a queue
-of eight, and the checkpoint's full context (131,072 tokens for mini). Override
-these with `serve --listen ADDRESS --queue-capacity N --max-context N`. K/V cache
-capacity follows the request's prompt plus output limit, rounded to 32 tokens.
+The default listener is `127.0.0.1:8080`, with up to four active requests, a queue
+of eight, and the checkpoint's full context (131,072 tokens for mini and flash). Override
+these with `serve --listen ADDRESS --parallel N --queue-capacity N --max-context N`. Four
+conversation prefix slots share a K/V capacity budget of one full context (5 GiB
+for mini BF16). `--cache-slots`, `--cache-reuse-threshold`, and `--cache-max-mib`
+configure retention; `cache_prompt: false` requests a cold run. Exact prefixes
+are reused at 32-token boundaries. See [cache policy and metrics](docs/api.md#conversation-prefix-slots).
+
+One GPU worker combines ready prefill and refinement segments across requests.
+Attention, K/V, block routing capacity, RNG, and output streams remain independent.
+New requests enter as slots and the shared K/V budget become available. Set
+`--parallel 1` for serialized execution; `--batch-wait-us` defaults to 200.
+The CUDA allocator retains up to `--workspace-cache-mib 2048` of unused scratch
+storage relative to live allocations; zero disables retention.
 
 ```sh
 target/release/minnow serve \
@@ -82,6 +98,34 @@ semantics, and limits. The local llama-swap entry is `llada-2.2-mini`; its UI is
 [available through llama-swap](http://127.0.0.1:8083/upstream/llada-2.2-mini/).
 Responses API and stream/session resumption are deferred.
 
+## Self-contained models and quantization
+
+`.mnw` bundles aligned weights, a checksummed MessagePack manifest, tokenizer,
+configuration, and the exact chat template. Both the original directory and the
+single-file container are supported by every model-loading command. Conversion
+uses bounded direct reads/writes and never loads the whole checkpoint.
+
+```sh
+target/release/minnow convert ~/models/minnow/llada2.2-mini-bf16.mnw
+target/release/minnow convert ~/models/minnow/llada2.2-mini-int8.mnw --experts int8
+target/release/minnow --model ~/hf/inclusionAI/LLaDA2.2-flash \
+  convert ~/models/minnow/llada2.2-flash-fp4.mnw --experts fp4
+target/release/minnow --model ~/models/minnow/llada2.2-flash-fp4.mnw serve
+```
+
+INT8 uses symmetric groups of 128 weights with FP16 scales; FP4 uses E2M1 values
+and groups of 32 with FP16 scales. This FP4 format is custom, not NVFP4's storage
+format. Only routed experts are quantized; embeddings, attention, routers,
+shared experts, and the head retain source precision. `--tensor-rules` selects
+mixed precision by projection/layer. CUDA dequantizes into tensor-core registers
+and keeps BF16 operands with FP32 accumulation. A lossless fragment layout avoids
+strided small weight loads; `--quant-layout row` retains the comparison layout.
+
+Weight payloads: mini BF16 30.28 GiB, mini INT8 16.25 GiB, mini FP4 9.79 GiB,
+flash FP4 57.96 GiB. Mini INT8 leaves room on a 24 GiB card for K/V and scratch,
+but full 131K K/V adds 5 GiB before runtime/workspace costs; context, parallelism,
+and scratch budgets must fit the target card. See [model format](docs/model-format.md).
+
 ## Validation
 
 Small checked-in fixtures use the checkpoint's actual Python classes and random
@@ -106,6 +150,11 @@ bitwise; the SiLU check covers every finite BF16 input. Diagnostic switches
 batches. CPU routing remains the default because it measured faster on GB10.
 `--compact-decode-experts` tests grouped GEMMs on assigned rows only; it measured
 within about 1% of the default on the cached-forward sweep and remains optional.
+Quantized experts use CPU routing and their own grouped CUDA kernels; the float
+expert execution switches compare the original BF16 paths. Quantized CUDA
+execution requires BF16 activations. The container and CPU fixture tests verify
+mixed precision and lossless layout conversion; the GPU oracle compares all
+encodings/group sizes against separately dequantized BF16 operands.
 
 The Python oracle environment used here is Python 3.13, PyTorch 2.10.0+cu130,
 Transformers 5.2.0, NumPy and safetensors. Python is not a runtime dependency.
@@ -155,9 +204,15 @@ saved `reference_generate.py` results. `scripts/check_compatibility.py` checks s
 settings, cancellation, and optional UI assets against the trained model. Use
 `--spawn` to start one server, or `--url URL` for an existing server (including a
 llama-swap `/upstream/llada-2.2-mini` URL). Large validations should use the guard.
+`scripts/check_batching.py --model FILE.mnw` validates simultaneous generation,
+late admission, and cancellation with one model process. `scripts/bench_models.py`
+measures repeated cold prefill and long-response useful decode, records actual
+lengths/refinement counts, and uses one resident model at a time.
 
 See [prefill and useful generation throughput](docs/throughput-comparison.md),
+[quantized mini/flash measurements](docs/quantization-performance.md),
 [decode optimization measurements](docs/decode-performance.md),
+[CUDA architecture comparison](docs/cuda-architecture.md),
 [matched-prompt length measurements](docs/decode-length-sweep.md),
 [measured validation and performance](docs/results.md), and
 [execution invariants](docs/implementation.md) for evidence and current limits.

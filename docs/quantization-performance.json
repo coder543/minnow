@@ -1,0 +1,3233 @@
+{
+  "device": "NVIDIA GB10",
+  "date": "2026-09-08",
+  "activation_dtype": "BF16",
+  "custom_kernel_ptx": "compute_80",
+  "settings": {
+    "parallel": 1,
+    "cache_prompt": false,
+    "prefill_chunk_tokens": 4096,
+    "attention_chunk_tokens": 1024,
+    "workspace_cache_mib": 2048,
+    "max_completion_tokens": 2048,
+    "temperature": 0,
+    "threshold": 0.5,
+    "editing_threshold": 0,
+    "max_post_steps": 16
+  },
+  "warmups": 1,
+  "measured_repetitions": 3,
+  "git_base": "04cda5fb6dd674f7e33cab89e51d1555a959f16f",
+  "worktree_changes": true,
+  "models": [
+    {
+      "name": "mini-bf16",
+      "container": "llada2.2-mini-bf16.mnw",
+      "manifest_blake3": "fe7cfd2a392ee90172efb319b68ceeb8037ae5b9cc40612e3f1186d05555874a",
+      "file_bytes": 32522059577,
+      "peak_system_growth_bytes": 36734492672,
+      "swap_out_bytes": 0,
+      "prefill": [
+        {
+          "tokens": 512,
+          "seconds": [
+            0.118160483,
+            0.116630154,
+            0.118699045
+          ],
+          "tokens_per_second": 4345.24705589568
+        },
+        {
+          "tokens": 2048,
+          "seconds": [
+            0.276010999,
+            0.274498447,
+            0.276952397
+          ],
+          "tokens_per_second": 7425.115794735202
+        },
+        {
+          "tokens": 4096,
+          "seconds": [
+            0.530393171,
+            0.524860788,
+            0.527779444
+          ],
+          "tokens_per_second": 7762.312517672124
+        },
+        {
+          "tokens": 8192,
+          "seconds": [
+            1.274552683,
+            1.27415012,
+            1.283628126
+          ],
+          "tokens_per_second": 6412.807363275594
+        }
+      ],
+      "decode": [
+        {
+          "name": "lhc",
+          "prompt": "What is the LHC?",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 41.90195061824658,
+          "mean_useful_tokens": 293.0,
+          "refinements_per_block": 20.3,
+          "runs": [
+            {
+              "useful_tokens": 293,
+              "model_tokens": 295,
+              "decode_seconds": 6.984484071,
+              "prefill_tokens": 0,
+              "prefill_seconds": 1.5296e-05,
+              "refinement_steps": 203,
+              "blocks": 10,
+              "evaluated_tokens": 6496,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 293,
+              "model_tokens": 295,
+              "decode_seconds": 6.991723153,
+              "prefill_tokens": 0,
+              "prefill_seconds": 8.224e-06,
+              "refinement_steps": 203,
+              "blocks": 10,
+              "evaluated_tokens": 6496,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 293,
+              "model_tokens": 295,
+              "decode_seconds": 7.001336471,
+              "prefill_tokens": 0,
+              "prefill_seconds": 7.424e-06,
+              "refinement_steps": 203,
+              "blocks": 10,
+              "evaluated_tokens": 6496,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "react",
+          "prompt": "Write a React TypeScript example",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 113.67644478632316,
+          "mean_useful_tokens": 1058.0,
+          "refinements_per_block": 8.029411764705882,
+          "runs": [
+            {
+              "useful_tokens": 1058,
+              "model_tokens": 1060,
+              "decode_seconds": 9.309706319,
+              "prefill_tokens": 0,
+              "prefill_seconds": 7.968e-06,
+              "refinement_steps": 273,
+              "blocks": 34,
+              "evaluated_tokens": 8736,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 1058,
+              "model_tokens": 1060,
+              "decode_seconds": 9.306889630999999,
+              "prefill_tokens": 0,
+              "prefill_seconds": 7.536e-06,
+              "refinement_steps": 273,
+              "blocks": 34,
+              "evaluated_tokens": 8736,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 1058,
+              "model_tokens": 1060,
+              "decode_seconds": 9.304755795,
+              "prefill_tokens": 0,
+              "prefill_seconds": 7.664e-06,
+              "refinement_steps": 273,
+              "blocks": 34,
+              "evaluated_tokens": 8736,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "fellowship",
+          "prompt": "List the main characters of the Fellowship of the Ring with a short back story for each.",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 39.19123773940672,
+          "mean_useful_tokens": 750.0,
+          "refinements_per_block": 22.52,
+          "runs": [
+            {
+              "useful_tokens": 750,
+              "model_tokens": 752,
+              "decode_seconds": 19.272110221,
+              "prefill_tokens": 0,
+              "prefill_seconds": 9.408e-06,
+              "refinement_steps": 563,
+              "blocks": 25,
+              "evaluated_tokens": 18016,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 750,
+              "model_tokens": 752,
+              "decode_seconds": 19.096589141,
+              "prefill_tokens": 0,
+              "prefill_seconds": 8.736e-06,
+              "refinement_steps": 563,
+              "blocks": 25,
+              "evaluated_tokens": 18016,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 750,
+              "model_tokens": 752,
+              "decode_seconds": 19.042092687,
+              "prefill_tokens": 0,
+              "prefill_seconds": 8.256e-06,
+              "refinement_steps": 563,
+              "blocks": 25,
+              "evaluated_tokens": 18016,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mini-int8",
+      "container": "llada2.2-mini-int8-packed.mnw",
+      "manifest_blake3": "2edf0aab9594fd1b3ba2ce3ff6c55e6b1ea9d2963213c8cbbb61c8f7d436f4e2",
+      "file_bytes": 17461885230,
+      "peak_system_growth_bytes": 20455190528,
+      "swap_out_bytes": 0,
+      "prefill": [
+        {
+          "tokens": 512,
+          "seconds": [
+            0.105956477,
+            0.102365992,
+            0.09940484
+          ],
+          "tokens_per_second": 4991.43220337328
+        },
+        {
+          "tokens": 2048,
+          "seconds": [
+            0.295814377,
+            0.302515391,
+            0.30025053
+          ],
+          "tokens_per_second": 6837.452383136938
+        },
+        {
+          "tokens": 4096,
+          "seconds": [
+            0.627273549,
+            0.62798544,
+            0.623819449
+          ],
+          "tokens_per_second": 6539.375766069005
+        },
+        {
+          "tokens": 8192,
+          "seconds": [
+            1.486025026,
+            1.466397026,
+            1.460525248
+          ],
+          "tokens_per_second": 5569.067185551933
+        }
+      ],
+      "decode": [
+        {
+          "name": "lhc",
+          "prompt": "What is the LHC?",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 60.268292294977776,
+          "mean_useful_tokens": 192.0,
+          "refinements_per_block": 18.0,
+          "runs": [
+            {
+              "useful_tokens": 192,
+              "model_tokens": 194,
+              "decode_seconds": 3.1542337639999998,
+              "prefill_tokens": 0,
+              "prefill_seconds": 2.6944e-05,
+              "refinement_steps": 126,
+              "blocks": 7,
+              "evaluated_tokens": 4032,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 192,
+              "model_tokens": 194,
+              "decode_seconds": 3.2065760469999995,
+              "prefill_tokens": 0,
+              "prefill_seconds": 3.3424e-05,
+              "refinement_steps": 126,
+              "blocks": 7,
+              "evaluated_tokens": 4032,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 192,
+              "model_tokens": 194,
+              "decode_seconds": 3.196454516,
+              "prefill_tokens": 0,
+              "prefill_seconds": 1.2928e-05,
+              "refinement_steps": 126,
+              "blocks": 7,
+              "evaluated_tokens": 4032,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "react",
+          "prompt": "Write a React TypeScript example",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 266.4246334050306,
+          "mean_useful_tokens": 2048.0,
+          "refinements_per_block": 4.676923076923077,
+          "runs": [
+            {
+              "useful_tokens": 2048,
+              "model_tokens": 2048,
+              "decode_seconds": 7.691536735,
+              "prefill_tokens": 0,
+              "prefill_seconds": 3.2e-05,
+              "refinement_steps": 304,
+              "blocks": 65,
+              "evaluated_tokens": 9728,
+              "finish_reason": "length",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 2048,
+              "model_tokens": 2048,
+              "decode_seconds": 7.743441990999999,
+              "prefill_tokens": 0,
+              "prefill_seconds": 2.32e-05,
+              "refinement_steps": 304,
+              "blocks": 65,
+              "evaluated_tokens": 9728,
+              "finish_reason": "length",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 2048,
+              "model_tokens": 2048,
+              "decode_seconds": 7.625951945,
+              "prefill_tokens": 0,
+              "prefill_seconds": 4.7776e-05,
+              "refinement_steps": 304,
+              "blocks": 65,
+              "evaluated_tokens": 9728,
+              "finish_reason": "length",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "fellowship",
+          "prompt": "List the main characters of the Fellowship of the Ring with a short back story for each.",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 56.83147815510433,
+          "mean_useful_tokens": 813.0,
+          "refinements_per_block": 20.74074074074074,
+          "runs": [
+            {
+              "useful_tokens": 813,
+              "model_tokens": 815,
+              "decode_seconds": 14.413527601,
+              "prefill_tokens": 0,
+              "prefill_seconds": 3.4704e-05,
+              "refinement_steps": 560,
+              "blocks": 27,
+              "evaluated_tokens": 17920,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 813,
+              "model_tokens": 815,
+              "decode_seconds": 14.248604324,
+              "prefill_tokens": 0,
+              "prefill_seconds": 8.24e-06,
+              "refinement_steps": 560,
+              "blocks": 27,
+              "evaluated_tokens": 17920,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 813,
+              "model_tokens": 815,
+              "decode_seconds": 14.254224981,
+              "prefill_tokens": 0,
+              "prefill_seconds": 7.68e-06,
+              "refinement_steps": 560,
+              "blocks": 27,
+              "evaluated_tokens": 17920,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mini-fp4",
+      "container": "llada2.2-mini-fp4-packed.mnw",
+      "manifest_blake3": "c5b83fdb8011342195926336c05f1911b271b94d41bfc1f42518591bf7631e35",
+      "file_bytes": 10528710145,
+      "peak_system_growth_bytes": 13315407872,
+      "swap_out_bytes": 0,
+      "prefill": [
+        {
+          "tokens": 512,
+          "seconds": [
+            0.092992611,
+            0.089019869,
+            0.089841393
+          ],
+          "tokens_per_second": 5650.094232793954
+        },
+        {
+          "tokens": 2048,
+          "seconds": [
+            0.291790818,
+            0.287905644,
+            0.288317406
+          ],
+          "tokens_per_second": 7078.2279252708895
+        },
+        {
+          "tokens": 4096,
+          "seconds": [
+            0.61616235,
+            0.617323637,
+            0.615461001
+          ],
+          "tokens_per_second": 6645.945005319969
+        },
+        {
+          "tokens": 8192,
+          "seconds": [
+            1.45482373,
+            1.462872832,
+            1.438063986
+          ],
+          "tokens_per_second": 5642.183432531517
+        }
+      ],
+      "decode": [
+        {
+          "name": "lhc",
+          "prompt": "What is the LHC?",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 71.1699492975669,
+          "mean_useful_tokens": 193.0,
+          "refinements_per_block": 18.428571428571427,
+          "runs": [
+            {
+              "useful_tokens": 193,
+              "model_tokens": 195,
+              "decode_seconds": 2.69008051,
+              "prefill_tokens": 0,
+              "prefill_seconds": 7.488e-06,
+              "refinement_steps": 129,
+              "blocks": 7,
+              "evaluated_tokens": 4128,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 193,
+              "model_tokens": 195,
+              "decode_seconds": 2.687675072,
+              "prefill_tokens": 0,
+              "prefill_seconds": 7.296e-06,
+              "refinement_steps": 129,
+              "blocks": 7,
+              "evaluated_tokens": 4128,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 193,
+              "model_tokens": 195,
+              "decode_seconds": 2.757700544,
+              "prefill_tokens": 0,
+              "prefill_seconds": 3.3968e-05,
+              "refinement_steps": 129,
+              "blocks": 7,
+              "evaluated_tokens": 4128,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "react",
+          "prompt": "Write a React TypeScript example",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 184.14034646394467,
+          "mean_useful_tokens": 884.0,
+          "refinements_per_block": 8.0,
+          "runs": [
+            {
+              "useful_tokens": 884,
+              "model_tokens": 886,
+              "decode_seconds": 4.739176304999999,
+              "prefill_tokens": 0,
+              "prefill_seconds": 2.4048e-05,
+              "refinement_steps": 232,
+              "blocks": 29,
+              "evaluated_tokens": 7424,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 884,
+              "model_tokens": 886,
+              "decode_seconds": 4.823279121000001,
+              "prefill_tokens": 0,
+              "prefill_seconds": 3.536e-05,
+              "refinement_steps": 232,
+              "blocks": 29,
+              "evaluated_tokens": 7424,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 884,
+              "model_tokens": 886,
+              "decode_seconds": 4.839602846,
+              "prefill_tokens": 0,
+              "prefill_seconds": 1.4128e-05,
+              "refinement_steps": 232,
+              "blocks": 29,
+              "evaluated_tokens": 7424,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "fellowship",
+          "prompt": "List the main characters of the Fellowship of the Ring with a short back story for each.",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 61.28934116935857,
+          "mean_useful_tokens": 959.0,
+          "refinements_per_block": 24.06451612903226,
+          "runs": [
+            {
+              "useful_tokens": 959,
+              "model_tokens": 961,
+              "decode_seconds": 15.778514272999999,
+              "prefill_tokens": 0,
+              "prefill_seconds": 2.416e-05,
+              "refinement_steps": 746,
+              "blocks": 31,
+              "evaluated_tokens": 23872,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 959,
+              "model_tokens": 961,
+              "decode_seconds": 15.576397984,
+              "prefill_tokens": 0,
+              "prefill_seconds": 1.5456e-05,
+              "refinement_steps": 746,
+              "blocks": 31,
+              "evaluated_tokens": 23872,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 959,
+              "model_tokens": 961,
+              "decode_seconds": 15.586365706,
+              "prefill_tokens": 0,
+              "prefill_seconds": 3.4224e-05,
+              "refinement_steps": 746,
+              "blocks": 31,
+              "evaluated_tokens": 23872,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        }
+      ],
+      "measurement_note": "isolated repeat; initial run overlapping CPU compilation discarded"
+    },
+    {
+      "name": "flash-fp4",
+      "container": "llada2.2-flash-fp4-packed.mnw",
+      "manifest_blake3": "a09cf7a05c9ce28b95e525c31ead8794d0979687b71ed9ce31b0ca56bdc0fcfc",
+      "file_bytes": 62248920319,
+      "peak_system_growth_bytes": 70440734720,
+      "swap_out_bytes": 0,
+      "prefill": [
+        {
+          "tokens": 512,
+          "seconds": [
+            0.453014922,
+            0.455401,
+            0.462603841
+          ],
+          "tokens_per_second": 1120.3339597665595
+        },
+        {
+          "tokens": 2048,
+          "seconds": [
+            1.3826327090000001,
+            1.377542072,
+            1.376668851
+          ],
+          "tokens_per_second": 1485.1902915725195
+        },
+        {
+          "tokens": 4096,
+          "seconds": [
+            2.74500783,
+            2.743380189,
+            2.731513337
+          ],
+          "tokens_per_second": 1494.9084505777614
+        },
+        {
+          "tokens": 8192,
+          "seconds": [
+            6.243393817,
+            6.168607598,
+            6.155577235
+          ],
+          "tokens_per_second": 1323.5974632588939
+        }
+      ],
+      "decode": [
+        {
+          "name": "lhc",
+          "prompt": "What is the LHC?",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 19.421872104403548,
+          "mean_useful_tokens": 368.0,
+          "refinements_per_block": 14.333333333333334,
+          "runs": [
+            {
+              "useful_tokens": 368,
+              "model_tokens": 370,
+              "decode_seconds": 19.039236176,
+              "prefill_tokens": 0,
+              "prefill_seconds": 9.264e-06,
+              "refinement_steps": 172,
+              "blocks": 12,
+              "evaluated_tokens": 5504,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 368,
+              "model_tokens": 370,
+              "decode_seconds": 18.929618447,
+              "prefill_tokens": 0,
+              "prefill_seconds": 8.288e-06,
+              "refinement_steps": 172,
+              "blocks": 12,
+              "evaluated_tokens": 5504,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 368,
+              "model_tokens": 370,
+              "decode_seconds": 18.874275332,
+              "prefill_tokens": 0,
+              "prefill_seconds": 7.472e-06,
+              "refinement_steps": 172,
+              "blocks": 12,
+              "evaluated_tokens": 5504,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "react",
+          "prompt": "Write a React TypeScript example",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 59.058122569615676,
+          "mean_useful_tokens": 1785.0,
+          "refinements_per_block": 4.9298245614035086,
+          "runs": [
+            {
+              "useful_tokens": 1785,
+              "model_tokens": 1787,
+              "decode_seconds": 30.129231456,
+              "prefill_tokens": 0,
+              "prefill_seconds": 8.16e-06,
+              "refinement_steps": 281,
+              "blocks": 57,
+              "evaluated_tokens": 8992,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 1785,
+              "model_tokens": 1787,
+              "decode_seconds": 30.266226511,
+              "prefill_tokens": 0,
+              "prefill_seconds": 4.1648e-05,
+              "refinement_steps": 281,
+              "blocks": 57,
+              "evaluated_tokens": 8992,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 1785,
+              "model_tokens": 1787,
+              "decode_seconds": 30.277928978000002,
+              "prefill_tokens": 0,
+              "prefill_seconds": 1.4496e-05,
+              "refinement_steps": 281,
+              "blocks": 57,
+              "evaluated_tokens": 8992,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "fellowship",
+          "prompt": "List the main characters of the Fellowship of the Ring with a short back story for each.",
+          "max_tokens": 2048,
+          "useful_decode_tokens_per_second": 16.810227628427004,
+          "mean_useful_tokens": 820.0,
+          "refinements_per_block": 16.25925925925926,
+          "runs": [
+            {
+              "useful_tokens": 820,
+              "model_tokens": 822,
+              "decode_seconds": 48.620743812,
+              "prefill_tokens": 0,
+              "prefill_seconds": 1.4688e-05,
+              "refinement_steps": 439,
+              "blocks": 27,
+              "evaluated_tokens": 14048,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 820,
+              "model_tokens": 822,
+              "decode_seconds": 48.439631722,
+              "prefill_tokens": 0,
+              "prefill_seconds": 1.472e-05,
+              "refinement_steps": 439,
+              "blocks": 27,
+              "evaluated_tokens": 14048,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            },
+            {
+              "useful_tokens": 820,
+              "model_tokens": 822,
+              "decode_seconds": 49.279106261,
+              "prefill_tokens": 0,
+              "prefill_seconds": 4.224e-05,
+              "refinement_steps": 439,
+              "blocks": 27,
+              "evaluated_tokens": 14048,
+              "finish_reason": "stop",
+              "matches_warmup": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "comparison_baseline": {
+    "source": "user measurement, not rerun here",
+    "model": "DiffusionGemma 26B A4B NVFP4",
+    "useful_tokens_per_second": 140
+  },
+  "kernel_microbenchmarks": {
+    "description": "48 experts; full call including output allocation and synchronization; 1 GiB allocator retention; 3 warmups, 10 measured calls",
+    "rows_32_tile": [
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4739691,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.42830159999999995,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5102893,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4920076,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6705286,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.0286218999999999,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4895867,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.20244439999999997,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5111420999999999,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.3208802,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6480405,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.1247408,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4743435,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.2745359,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5380366999999999,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4084615,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6185731,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.0116362,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.48508429999999997,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.1749178,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5100141,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.2903312,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6177779,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.0589804,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.4649258,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.3935366,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.4973836,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.43156569999999994,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6315619,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.8908594000000001,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.4697675,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.2088524,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5062189,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.3284547,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6318772,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 1.0265514,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.46528749999999997,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.2639023,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5232397,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.4024823,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6392725,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.938935,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.465633,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.1531641,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.4987676,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.3013921,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6412196,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.9377205,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8118071,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.9305822,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8896795000000002,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1144664,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1883179999999998,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 3.9541888,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8077718,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 0.9213429000000001,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.9240877,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.3743854,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1793804,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 4.2537457,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8087639,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.1021534,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.9311709,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.4081088,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1622202,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 3.7656789,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8079718000000002,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 0.7804748,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.9190540999999999,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.2036389,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.2282126,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 3.488207,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.7634596999999999,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.7423507,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8294359,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.869233,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1677387,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 3.3576158,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.759034,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 0.9937736,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8840203,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.3970207000000001,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1693131,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 4.2043903,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8113303,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.0705404,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.877697,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.3230171000000002,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1600138,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 3.1697092000000002,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.7578308,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 0.777326,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8786971,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.1290801,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1699163,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 3.1314817,
+        "out": 4096,
+        "rows_per_expert": 128
+      }
+    ],
+    "rows_64_tile": [
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.47532110000000005,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5100781000000001,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5239052999999999,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5674704,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6495652000000001,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.0981965999999999,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4989884,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.2721119,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5069757,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4120152,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6652374,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.3850206999999999,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4748619,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.39452869999999995,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.505358,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5506031,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6536805,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.1747667,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4790028,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.28154080000000004,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5081453,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4721211,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6203587,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.2006036,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.47095790000000004,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.3841574,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5092093,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5384846000000001,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6461717,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 1.0062905,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.46720110000000004,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.2093467,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5036301,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.4223272,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6427539999999999,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 1.1317265,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.496094,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.34060029999999997,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.505334,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.44895300000000005,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6362932,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 1.1344672999999998,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.4702154,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.207902,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.531691,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.3619844,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6487268,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 1.0049465,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8131015000000001,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.0639173,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8786203000000001,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.2678879999999997,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1729867,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 4.080692,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8099111,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.1475937,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.9304686000000002,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8338648,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1713708,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 4.6725560999999995,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8390185,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.2283013,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.9242173,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.6857423,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1663867,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 4.4018378,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8141398999999998,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.1406993,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.9365438,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.5803722,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1685611000000002,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 4.4290667,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.7542403000000002,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.6748158999999998,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8768106999999998,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.9685871000000001,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1553691,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 3.5233064,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.7543316,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.1057150999999998,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8717738000000002,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.5447752000000001,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1738299999999997,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 4.097843999999999,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.7888197000000001,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.1215567,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8447417000000002,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.5639448,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1552218,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 3.5387753,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8135207,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.0150761,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8625369999999999,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.3956464,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1835756,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 3.5659707,
+        "out": 4096,
+        "rows_per_expert": 128
+      }
+    ],
+    "rows_128_tile": [
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4800827,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.41121509999999994,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5129901,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5898866,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6228804,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.3562413,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4734171,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.2774432,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5075949,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4521129,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6209411,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.3603693,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5058445,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.389583,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.5094333000000001,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6026866,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6259156,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.4055024,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.4748635,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.34307560000000004,
+        "out": 512,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.510254,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6075203,
+        "out": 512,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 0.6236419,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 2048,
+        "milliseconds": 1.3801102,
+        "out": 512,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.47175150000000005,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.41992080000000004,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5061773,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6132979000000001,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6457444,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 1.5200438,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.4713515,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.3155794,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5171245,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.4542682,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6785815,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 1.3920431,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.46883779999999997,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.3764277,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5053116,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5346207000000001,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.6453732,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 1.3160602000000001,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.47335950000000004,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.3262227,
+        "out": 2048,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5396943000000001,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.5325517999999999,
+        "out": 2048,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 0.647506,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 512,
+        "milliseconds": 1.2878297,
+        "out": 2048,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8041814,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1203687999999996,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.9610880000000002,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.4028008,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1737307,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 5.4761991000000005,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8104759000000001,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.2747064000000001,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8766298000000001,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8962554999999999,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1644347,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 5.1709942,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8061029999999998,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.5626616999999998,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.9261469,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1234856,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.2310878,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 5.21174,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.8440071999999998,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.5280662999999999,
+        "out": 1024,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 1.9239389,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1449578000000002,
+        "out": 1024,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 2.1596265999999997,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 4096,
+        "milliseconds": 5.056699,
+        "out": 1024,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.7560738999999999,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8858507,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8709434,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.5338703000000002,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1543034,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Sym",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 5.3135949,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.7865253,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.4291969,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8511353000000002,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8603418,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1790828,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4E2m1",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 4.9985899,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.7816437,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.5575976999999999,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8243638999999998,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.047162,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1104264,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "I8Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 5.1157491,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.7547971999999998,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.4999573,
+        "out": 4096,
+        "rows_per_expert": 6
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 1.8513609,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.0059362000000003,
+        "out": 4096,
+        "rows_per_expert": 32
+      },
+      {
+        "encoding": "BF16",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 2.1745931,
+        "out": 4096,
+        "rows_per_expert": 128
+      },
+      {
+        "encoding": "Fp4Mma",
+        "experts": 48,
+        "input": 1024,
+        "milliseconds": 4.9383976,
+        "out": 4096,
+        "rows_per_expert": 128
+      }
+    ]
+  },
+  "allocator_ablation": {
+    "model": "mini-bf16",
+    "workspace_cache_mib": 0,
+    "warmups": 1,
+    "measured_repetitions": 2,
+    "prefill": [
+      {
+        "tokens": 512,
+        "seconds": [
+          0.121273077,
+          0.117589599
+        ],
+        "tokens_per_second": 4286.982031466482
+      },
+      {
+        "tokens": 2048,
+        "seconds": [
+          0.28329801799999993,
+          0.281734408
+        ],
+        "tokens_per_second": 7249.141485554319
+      },
+      {
+        "tokens": 4096,
+        "seconds": [
+          0.547713207,
+          0.548327659
+        ],
+        "tokens_per_second": 7474.1738689878375
+      },
+      {
+        "tokens": 8192,
+        "seconds": [
+          1.3517993019999999,
+          1.346603192
+        ],
+        "tokens_per_second": 6071.740608167404
+      }
+    ],
+    "decode": [
+      {
+        "name": "lhc",
+        "prompt": "What is the LHC?",
+        "max_tokens": 2048,
+        "useful_decode_tokens_per_second": 42.06223031233984,
+        "mean_useful_tokens": 293.0,
+        "refinements_per_block": 20.3,
+        "runs": [
+          {
+            "useful_tokens": 293,
+            "model_tokens": 295,
+            "decode_seconds": 6.940302918,
+            "prefill_tokens": 0,
+            "prefill_seconds": 1.6097e-05,
+            "refinement_steps": 203,
+            "blocks": 10,
+            "evaluated_tokens": 6496,
+            "finish_reason": "stop",
+            "matches_warmup": true
+          },
+          {
+            "useful_tokens": 293,
+            "model_tokens": 295,
+            "decode_seconds": 6.991435738000001,
+            "prefill_tokens": 0,
+            "prefill_seconds": 3.2113e-05,
+            "refinement_steps": 203,
+            "blocks": 10,
+            "evaluated_tokens": 6496,
+            "finish_reason": "stop",
+            "matches_warmup": true
+          }
+        ]
+      },
+      {
+        "name": "react",
+        "prompt": "Write a React TypeScript example",
+        "max_tokens": 2048,
+        "useful_decode_tokens_per_second": 112.92896296201566,
+        "mean_useful_tokens": 1058.0,
+        "refinements_per_block": 8.029411764705882,
+        "runs": [
+          {
+            "useful_tokens": 1058,
+            "model_tokens": 1060,
+            "decode_seconds": 9.350841993,
+            "prefill_tokens": 0,
+            "prefill_seconds": 1.6144e-05,
+            "refinement_steps": 273,
+            "blocks": 34,
+            "evaluated_tokens": 8736,
+            "finish_reason": "stop",
+            "matches_warmup": true
+          },
+          {
+            "useful_tokens": 1058,
+            "model_tokens": 1060,
+            "decode_seconds": 9.386600949,
+            "prefill_tokens": 0,
+            "prefill_seconds": 1.8384e-05,
+            "refinement_steps": 273,
+            "blocks": 34,
+            "evaluated_tokens": 8736,
+            "finish_reason": "stop",
+            "matches_warmup": true
+          }
+        ]
+      },
+      {
+        "name": "fellowship",
+        "prompt": "List the main characters of the Fellowship of the Ring with a short back story for each.",
+        "max_tokens": 2048,
+        "useful_decode_tokens_per_second": 38.52558570477354,
+        "mean_useful_tokens": 750.0,
+        "refinements_per_block": 22.52,
+        "runs": [
+          {
+            "useful_tokens": 750,
+            "model_tokens": 752,
+            "decode_seconds": 19.602324088,
+            "prefill_tokens": 0,
+            "prefill_seconds": 1.5424e-05,
+            "refinement_steps": 563,
+            "blocks": 25,
+            "evaluated_tokens": 18016,
+            "finish_reason": "stop",
+            "matches_warmup": true
+          },
+          {
+            "useful_tokens": 750,
+            "model_tokens": 752,
+            "decode_seconds": 19.332839974000002,
+            "prefill_tokens": 0,
+            "prefill_seconds": 9.456e-06,
+            "refinement_steps": 563,
+            "blocks": 25,
+            "evaluated_tokens": 18016,
+            "finish_reason": "stop",
+            "matches_warmup": true
+          }
+        ]
+      }
+    ],
+    "peak_system_growth_bytes": 35879362560,
+    "swap_out_bytes": 0
+  }
+}

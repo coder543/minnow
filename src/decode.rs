@@ -1,6 +1,7 @@
 // Joint decoder ported from inclusionAI's Apache-2.0 LLaDA2.2 reference.
 use crate::model::{Cache, Model};
-use anyhow::{Result, bail, ensure};
+use crate::prefix::{CacheOptions, CachePool};
+use anyhow::{Context, Result, bail, ensure};
 use candle_core::{D, Tensor};
 use clap::Args;
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -106,6 +107,11 @@ pub struct Stats {
     pub total_forwards: usize,
     pub processed_tokens: usize,
     pub prefill_tokens: usize,
+    /// Exact complete prompt blocks reused from a previous request.
+    pub cached_tokens: usize,
+    pub cache_slot: Option<usize>,
+    pub cache_copied_tokens: usize,
+    pub cache_seconds: f64,
     /// Positions evaluated with vocabulary predictions, including repeated refinements.
     pub evaluated_tokens: usize,
     pub prefill_seconds: f64,
@@ -121,7 +127,8 @@ impl Stats {
         self.processed_tokens = cache.processed_tokens;
         self.evaluated_tokens = self.denoise_forwards * block_size;
         self.elapsed_seconds = start.elapsed().as_secs_f64();
-        self.decode_seconds = (self.elapsed_seconds - self.prefill_seconds).max(0.0);
+        self.decode_seconds =
+            (self.elapsed_seconds - self.prefill_seconds - self.cache_seconds).max(0.0);
         self.tokens_per_second = rate(self.completion_tokens, self.elapsed_seconds);
         self.total_tokens_per_second = rate(self.evaluated_tokens, self.decode_seconds);
         self.refinement_steps_per_block = rate(self.denoise_forwards, self.blocks as f64);
@@ -147,6 +154,8 @@ pub struct BatchStats {
 }
 pub enum Progress<'a> {
     Prefill {
+        cached: usize,
+        slot: Option<usize>,
         processed: usize,
         total: usize,
         seconds: f64,
@@ -465,9 +474,42 @@ pub fn decode_block(
     }
 }
 
+/// A forward may execute immediately or join other requests at the scheduler.
+/// The latter transfers ownership of K/V to the GPU worker for that invocation.
+pub trait Executor {
+    fn config(&self) -> &crate::config::Config;
+    fn prefill_chunk_tokens(&self) -> usize;
+    fn forward_tokens(
+        &self,
+        tokens: &[u32],
+        cache: &mut Cache,
+        logits: bool,
+    ) -> Result<Option<Tensor>>;
+    fn synchronize(&self) -> Result<()>;
+}
+impl Executor for Model {
+    fn config(&self) -> &crate::config::Config {
+        &self.config
+    }
+    fn prefill_chunk_tokens(&self) -> usize {
+        Model::prefill_chunk_tokens(self)
+    }
+    fn forward_tokens(
+        &self,
+        tokens: &[u32],
+        cache: &mut Cache,
+        logits: bool,
+    ) -> Result<Option<Tensor>> {
+        self.forward(tokens, cache, logits, None)
+    }
+    fn synchronize(&self) -> Result<()> {
+        Ok(self.device().synchronize()?)
+    }
+}
+
 /// Build committed K/V for a block-aligned prompt using the serving prefill path.
 pub fn prefill(
-    model: &Model,
+    model: &(impl Executor + ?Sized),
     prompt: &[u32],
     cache: &mut Cache,
     cancelled: impl Fn() -> bool,
@@ -476,40 +518,44 @@ pub fn prefill(
 }
 
 fn prefill_observed(
-    model: &Model,
+    model: &(impl Executor + ?Sized),
     prompt: &[u32],
     cache: &mut Cache,
     cancelled: impl Fn() -> bool,
     mut progress: impl FnMut(usize, usize, f64) -> Result<()>,
 ) -> Result<()> {
     let start = Instant::now();
-    let b = model.config.block_size;
+    let b = model.config().block_size;
     ensure!(
-        cache.is_empty() && prompt.len().is_multiple_of(b),
-        "prefill requires an empty cache and complete prompt blocks"
+        prompt.len().is_multiple_of(b) && prompt.starts_with(cache.tokens()),
+        "prefill requires complete prompt blocks matching the committed cache"
     );
-    progress(0, prompt.len(), 0.0)?;
+    progress(cache.len(), prompt.len(), 0.0)?;
     while cache.len() < prompt.len() {
         let requested = model.prefill_chunk_tokens().min(prompt.len() - cache.len());
         let chunk = &prompt[cache.len()..cache.len() + requested];
         if cancelled() {
             bail!("request cancelled");
         }
-        model.forward(chunk, cache, false, None)?;
+        model.forward_tokens(chunk, cache, false)?;
         cache.commit(chunk)?;
-        model.device().synchronize()?;
+        model.synchronize()?;
         progress(cache.len(), prompt.len(), start.elapsed().as_secs_f64())?;
     }
-    model.device().synchronize()?;
+    model.synchronize()?;
     Ok(())
 }
 
 /// Commit a final block, refreshing K/V only when its tokens differ from the
 /// last successful forward. Returns whether an extra forward was necessary.
-pub fn commit_block(model: &Model, tokens: &[u32], cache: &mut Cache) -> Result<bool> {
+pub fn commit_block(
+    model: &(impl Executor + ?Sized),
+    tokens: &[u32],
+    cache: &mut Cache,
+) -> Result<bool> {
     let refresh = !cache.staged_matches(tokens);
     if refresh {
-        model.forward(tokens, cache, false, None)?;
+        model.forward_tokens(tokens, cache, false)?;
     }
     cache.commit(tokens)?;
     Ok(refresh)
@@ -531,7 +577,37 @@ pub fn generate_observed(
     opts: &Options,
     special: SpecialTokens,
     cancelled: impl Fn() -> bool,
-    mut observe: impl FnMut(Progress<'_>) -> Result<bool>,
+    observe: impl FnMut(Progress<'_>) -> Result<bool>,
+) -> Result<Generation> {
+    let mut pool = CachePool::new(
+        model,
+        model.config.max_position_embeddings,
+        CacheOptions {
+            cache_slots: 0,
+            ..CacheOptions::default()
+        },
+    )?;
+    generate_cached_observed(
+        model,
+        prompt,
+        opts,
+        special,
+        (&mut pool, false),
+        cancelled,
+        observe,
+    )
+}
+
+/// Reuse committed prefixes from the pool when the request's cache flag is true.
+/// Failed generations discard their checked-out slot; other slots remain valid.
+pub fn generate_cached_observed(
+    model: &Model,
+    prompt: &[u32],
+    opts: &Options,
+    special: SpecialTokens,
+    (pool, reuse): (&mut CachePool, bool),
+    cancelled: impl Fn() -> bool,
+    observe: impl FnMut(Progress<'_>) -> Result<bool>,
 ) -> Result<Generation> {
     opts.validate(model.config.vocab_size)?;
     ensure!(!prompt.is_empty(), "prompt must not be empty");
@@ -543,7 +619,7 @@ pub fn generate_observed(
         "prompt contains reserved diffusion tokens or invalid token IDs"
     );
     let start = Instant::now();
-    let mut stats = Stats {
+    let stats = Stats {
         prompt_tokens: prompt.len(),
         ..Stats::default()
     };
@@ -569,16 +645,89 @@ pub fn generate_observed(
         total <= model.config.max_position_embeddings,
         "request exceeds model context"
     );
-    let mut cache = Cache::new(&model.config, total)?;
     let prefill_len = prompt.len() / b * b;
+    let mut checkout = pool.checkout(model, &prompt[..prefill_len], total, reuse)?;
+    let result = generate_in_cache_observed(
+        model,
+        prompt,
+        opts,
+        special,
+        (&mut checkout, start),
+        cancelled,
+        observe,
+    );
+    if result.is_ok() {
+        pool.checkin(checkout);
+    } else {
+        pool.discard(checkout);
+    }
+    result
+}
+
+/// Execute an admitted request. The scheduler owns slot admission and returns
+/// the reservation on both success and failure; the decoder owns refinement.
+pub(crate) fn generate_in_cache_observed(
+    model: &(impl Executor + ?Sized),
+    prompt: &[u32],
+    opts: &Options,
+    special: SpecialTokens,
+    (checkout, start): (&mut crate::prefix::Checkout, Instant),
+    cancelled: impl Fn() -> bool,
+    mut observe: impl FnMut(Progress<'_>) -> Result<bool>,
+) -> Result<Generation> {
+    opts.validate(model.config().vocab_size)?;
+    ensure!(
+        !prompt.is_empty()
+            && prompt
+                .iter()
+                .all(|&t| (t as usize) < model.config().vocab_size
+                    && ![special.mask, special.delete, special.split].contains(&t)),
+        "invalid prompt tokens"
+    );
+    let b = model.config().block_size;
+    let requested = prompt
+        .len()
+        .checked_add(opts.max_tokens)
+        .context("context length overflow")?;
+    let total = requested
+        .checked_add(b - 1)
+        .context("context length overflow")?
+        / b
+        * b;
+    ensure!(
+        total <= checkout.cache.capacity(),
+        "request exceeds admitted cache capacity"
+    );
+    let prefill_len = prompt.len() / b * b;
+    let mut stats = Stats {
+        prompt_tokens: prompt.len(),
+        cached_tokens: checkout.cached,
+        cache_copied_tokens: checkout.copied,
+        cache_slot: checkout.slot,
+        cache_seconds: start.elapsed().as_secs_f64(),
+        ..Stats::default()
+    };
+    if opts.max_tokens == 0 {
+        return Ok(Generation {
+            token_ids: vec![],
+            finish_reason: "length".into(),
+            stats,
+            batches: vec![],
+        });
+    }
+
+    let cache = &mut checkout.cache;
+    let prefill_start = Instant::now();
     prefill_observed(
         model,
         &prompt[..prefill_len],
-        &mut cache,
+        cache,
         &cancelled,
         |processed, total, seconds| {
             ensure!(
                 observe(Progress::Prefill {
+                    cached: stats.cached_tokens,
+                    slot: stats.cache_slot,
                     processed,
                     total,
                     seconds
@@ -588,8 +737,8 @@ pub fn generate_observed(
             Ok(())
         },
     )?;
-    stats.prefill_tokens = prefill_len;
-    stats.prefill_seconds = start.elapsed().as_secs_f64();
+    stats.prefill_tokens = prefill_len - stats.cached_tokens;
+    stats.prefill_seconds = prefill_start.elapsed().as_secs_f64();
     let mut rng = StdRng::seed_from_u64(opts.seed);
     let mut all = prompt[..prefill_len].to_vec();
     let mut finish = "length";
@@ -610,12 +759,12 @@ pub fn generate_observed(
             if cancelled() {
                 bail!("request cancelled");
             }
-            let logits = model.forward(tokens, &mut cache, true, None)?.unwrap();
+            let logits = model.forward_tokens(tokens, cache, true)?.unwrap();
             // The prediction path synchronizes as well. Synchronize here so live
             // timing events describe completed GPU work rather than dispatch time.
-            model.device().synchronize()?;
+            model.synchronize()?;
             stats.denoise_forwards += 1;
-            stats.update(&cache, start, b);
+            stats.update(cache, start, b);
             batch.refinement_steps += 1;
             batch.evaluated_tokens += b;
             batch.elapsed_seconds = batch_start.elapsed().as_secs_f64();
@@ -642,16 +791,16 @@ pub fn generate_observed(
             if cancelled() {
                 bail!("request cancelled");
             }
-            if commit_block(model, &block, &mut cache)? {
+            if commit_block(model, &block, cache)? {
                 stats.commit_forwards += 1;
             } else {
                 stats.reused_commits += 1;
             }
         }
-        model.device().synchronize()?;
+        model.synchronize()?;
         batch.completion_tokens = end - prompt.len() - stats.completion_tokens;
         stats.completion_tokens = end - prompt.len();
-        stats.update(&cache, start, b);
+        stats.update(cache, start, b);
         batch.elapsed_seconds = batch_start.elapsed().as_secs_f64();
         batch.tokens_per_second = rate(batch.completion_tokens, batch.elapsed_seconds);
         batch.total_tokens_per_second = rate(batch.evaluated_tokens, batch.elapsed_seconds);
@@ -679,9 +828,9 @@ pub fn generate_observed(
             .any(|t| [special.mask, special.delete, special.split].contains(t)),
         "decoding left unresolved diffusion tokens"
     );
-    model.device().synchronize()?;
+    model.synchronize()?;
     stats.completion_tokens = token_ids.len();
-    stats.update(&cache, start, b);
+    stats.update(cache, start, b);
     Ok(Generation {
         token_ids,
         finish_reason: finish.into(),

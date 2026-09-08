@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include "cuda/routing.cu"
 #include "cuda/qkv.cu"
+#include "cuda/quantized.cu"
 
 // Preserve the reference's BF16 rounding BETWEEN SiLU and multiplication.
 // FP32 values stay in registers; the only tensor output is BF16.
@@ -91,6 +92,40 @@ SOFTMAX(8)
 SOFTMAX(16)
 SOFTMAX(32)
 SOFTMAX(64)
+
+// Long rows use bounded register storage. Re-read BF16 scores instead of
+// allocating FP32 scores, a host-built mask, and intermediate softmax tensors.
+extern "C" __global__ void minnow_block_softmax_long(
+    const __nv_bfloat16* scores, __nv_bfloat16* out, int cols, int queries,
+    int offset, int block_size, float scale) {
+  __shared__ float scratch[8];
+  const size_t row = blockIdx.x;
+  const int visible = min(cols, ((offset + (int)(row % queries)) / block_size + 1) * block_size);
+  float maximum = -INFINITY;
+  for (int col = threadIdx.x; col < visible; col += blockDim.x) {
+    const float value = __bfloat162float(__float2bfloat16_rn(
+        __bfloat162float(scores[row * cols + col]) * scale));
+    maximum = fmaxf(maximum, value);
+  }
+  maximum = block_reduce<true>(maximum, scratch);
+  __syncthreads();
+  float sum = 0.0f;
+  for (int col = threadIdx.x; col < visible; col += blockDim.x) {
+    const float value = __bfloat162float(__float2bfloat16_rn(
+        __bfloat162float(scores[row * cols + col]) * scale));
+    sum += expf(value - maximum);
+  }
+  const float inv = 1.0f / block_reduce<false>(sum, scratch);
+  for (int col = threadIdx.x; col < cols; col += blockDim.x) {
+    float probability = 0.0f;
+    if (col < visible) {
+      const float value = __bfloat162float(__float2bfloat16_rn(
+          __bfloat162float(scores[row * cols + col]) * scale));
+      probability = expf(value - maximum) * inv;
+    }
+    out[row * cols + col] = __float2bfloat16_rn(probability);
+  }
+}
 
 // Gather assigned expert rows, weight in FP32, and reduce in the same binary
 // tree as Candle's sum. No [tokens, top_k, hidden] intermediate is materialized.

@@ -21,24 +21,79 @@ new UI build is served without copying it into minnow. The tested UI is llama.cp
 b10819. No session resumption is implemented; the UI startup lookup returns an
 empty list.
 
-Context defaults to `config.json`'s `max_position_embeddings`: 131,072 for mini.
+Context defaults to `config.json`'s `max_position_embeddings`: 131,072 for mini and flash.
 `--max-context` can reduce it to a whole number of 32-token blocks. This is a
 per-request prompt-plus-output limit, not an eagerly allocated global cache.
-K/V storage is allocated for the request's block-rounded budget. Full-context
+K/V storage is allocated lazily, with capacity rounded up in 2,048-token increments
+(capped at the context limit). Full-context
 BF16 K/V alone is 5 GiB (20 layers × K/V × 4 heads × 128 dimensions × 131,072 ×
 2 bytes); working activations require additional memory. The full context is
 advertised by `/health`, `/props`, and `/v1/models`. Advertising it does not imply
 a completed full-length performance or soak test.
 
-Defaults: queue 8, maximum output 256, greedy sampling, threshold 0.5,
+Defaults: parallel 4, queue 8, maximum output 256, greedy sampling, threshold 0.5,
 editing_threshold 0, max_post_steps 16, steps 32, max_steps_per_block 1000,
 top_k 0, top_p 1, seed 42. All decoding defaults have `serve --...` arguments.
 The llama-swap entry overrides maximum output to 2,048.
 
+### Conversation prefix slots
+
+`--cache-slots 4` retains up to four independent conversation prefixes, with one
+inference worker. `--cache-slots 0` disables reuse. The default aggregate K/V
+capacity budget is one full context (5 GiB for mini BF16); `--cache-max-mib N`
+overrides it and must fit at least one configured `--max-context`. Idle slots are
+evicted in LRU order before growing a buffer. Weights are shared by all slots.
+
+Selection uses the longest exact token prefix, rounded down to a 32-token block
+boundary. Committed blocks are bidirectional internally, so a changed token
+invalidates its entire block and everything after it. A match covering at least
+`--cache-reuse-threshold 0.8` of the shorter prefix updates that slot in place.
+A smaller match copies only those committed blocks into an empty or LRU slot,
+preserving the source conversation when the memory budget allows. If both buffers
+cannot fit, the source is truncated and reused in place. Similarity is a heuristic
+for slot retention; it never permits reuse of nonmatching tokens.
+Changing prefill batch boundaries can change BF16 rounding, expert routing, and
+generated wording even for identical prompts; warm/cold bitwise equivalence is
+not promised. See [numerical checks and measurements](prefix-cache.md).
+
+Prompt blocks and finalized generated blocks committed during decoding are
+retained. The final output block may need recomputation on the next request;
+uncommitted refinement K/V is never reused. Failed/cancelled generations discard
+their active slot. `cache_prompt: false` performs a cold request without storing
+its result; it can still evict idle slots if needed for the memory budget.
+`/slots` exposes execution slots and the selected prefix's committed/reserved
+capacity; `/props` exposes policy, budget, and parallelism. Active prefixes are
+exclusively checked out and cannot be reused or evicted by another request. If
+all other slots are busy, a divergent prefix reuses its source in place. A
+zero-output request leaves cached conversations untouched. Stream resumption is
+not implemented.
+
+### Continuous batching
+
+`--parallel N` (default 4, maximum 64) bounds concurrent requests. One GPU worker
+combines ready token segments across sequences, sharing dense/MoE/head GEMMs.
+Each sequence retains its own attention, positional offsets, K/V, block-capacity
+routing, RNG, decoder state, and stream. Prefill and refinement may share a batch.
+New requests are admitted as execution slots and the aggregate K/V budget allow.
+Requests waiting for K/V count toward both `--queue-capacity` and
+`/health.queued_requests`, including the scheduler's pending admission candidate.
+Idle prefixes are evicted first; active reservations, including cache-bypass
+requests, count toward the same budget. Long requests can consequently reduce
+the achievable parallelism without reducing the advertised per-request context.
+
+`--batch-wait-us` defaults to 200 and bounds the time spent collecting ready work.
+A lone active request does not wait for another arrival. `--parallel 1` serializes
+execution. `/health.batching` reports `forward_batches`, `sequence_forwards`, and
+`max_batch_size`, allowing clients/tests to distinguish actual batched execution
+from concurrently queued requests. Inference timings include scheduling between
+forwards once admitted; they exclude time awaiting admission. Changing batch
+composition may change floating-point reduction order and MoE selections, so
+greedy output is not guaranteed bitwise invariant across concurrency levels.
+
 ## Routes and request options
 
 - `POST /v1/chat/completions` (also `/chat/completions`): Chat Completions.
-- `POST /v1/completions`: plain string prompts, streaming or non-streaming.
+- `POST /v1/completions`: plain string or token-ID prompts, streaming or non-streaming.
 - `GET /v1/models`, `/v1/models/{id}`: model identity and context metadata.
 - `GET /health`, `/v1/health`, `/props`, `/slots`: readiness and UI metadata.
 - `POST /tokenize`, `/detokenize`, `/apply-template`: text utilities.
@@ -110,8 +165,10 @@ content/tool deltas, a finish chunk, optional final usage chunk, then `[DONE]`.
 Only finalized blocks emit text or tool arguments. Progress-only events are
 requested with `return_progress: true` or `timings_per_token: true`.
 
-Prefill events contain `prompt_progress` with `processed`, `total`, `cache: 0`,
-and `time_ms`. A final timing event without `prompt_progress` clears the UI's
+Prefill events contain `prompt_progress` with `processed`, `total`, `cache`,
+and `time_ms`. Processed and total include cached tokens; `cache` is the reused
+prefix length. A fully cached prompt skips progress events. A final timing event
+without `prompt_progress` clears the UI's
 preparing state immediately when prefill ends. Refinement events carry metadata
 without text or a prefill progress field. The UI displays ordinary prefill and
 generation speeds; custom refinement statistics remain available to API clients.
@@ -120,7 +177,9 @@ generation speeds; custom refinement statistics remain available to API clients.
 | --- | --- |
 | `usage.prompt_tokens` | Entire rendered prompt, including tool definitions/history. |
 | `usage.completion_tokens` | Final generated model IDs, including special controls and positions generated past a stop within the final block. |
-| `timings.prompt_n`, `prompt_per_second` | Complete prompt blocks processed by prefill and their measured throughput. A partial prompt block is processed during diffusion. |
+| `timings.prompt_n`, `prompt_per_second` | Newly computed complete prompt blocks and their measured throughput, excluding cached tokens and cache setup/copy time. A partial prompt block is processed during diffusion. |
+| `usage.prompt_tokens_details.cached_tokens`, `timings.cache_n`, `minnow.cached_tokens` | Exact complete prompt tokens reused across requests. |
+| `minnow.cache_slot`, `cache_copied_tokens`, `cache_seconds` | Selected slot (null for cold requests), prefix tokens copied when forking, and synchronized lookup/allocation/copy time. |
 | `timings.predicted_n`, `predicted_per_second` | Generated non-special token count and rate over decode time, including refinement/commit costs. Stop-boundary overgeneration remains counted. |
 | `minnow.text_tokens`, `text_tokens_per_second` | Same non-special output count/rate. |
 | `minnow.evaluated_tokens` | 32 × refinement forwards: all predicted positions, including repeated refinements, known prompt positions, and final padding. This is work, not useful output. |
@@ -159,3 +218,18 @@ rewriting. Artifacts: `artifacts/minnow-swap-api.json`, `minnow-ui-check.json`, 
 system baseline, with no new swap-out; disconnect cancellation took about 54 ms.
 This validates the configured full limit and prompts beyond the old 8K cap, not a
 131,072-token soak run.
+
+The subsequent container/batching checks use one real mini BF16 weight set.
+`check_compatibility.py --spawn --model FILE.mnw` passed tools, prefill completion,
+and cancellation with 31.39 GiB peak system growth and zero swap-out.
+The final `check_batching.py --model FILE.mnw` run observed 499 sequence forwards
+in 416 GPU batches, with up to three sequences in a batch. It admitted a short
+request during a 1,024-token response (0.24 s HTTP latency), verified disconnect
+recovery, and peaked at 31.85 GiB system growth with zero swap-out. Artifacts are
+`artifacts/api-container-compatibility.json` and `artifacts/final-batching.json`.
+
+The updated llama-swap wrapper serves the original-precision container directly.
+Final HTTP checks through llama-swap pass cache forks/growth/LRU, full and partial
+hit accounting, tools, progress clearing, and cancellation. The current external
+UI also passes a browser `get_datetime` tool/result round trip. The refreshed
+minimal-load reservation remains 33 GiB (31.877 GiB measured system growth).

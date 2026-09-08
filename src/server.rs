@@ -1,3 +1,4 @@
+mod batching;
 mod output;
 mod request;
 #[cfg(test)]
@@ -5,8 +6,12 @@ mod tests;
 mod webui;
 
 use crate::{
-    decode::{BatchStats, Options, Progress, SpecialTokens, Stats, generate_observed, rate},
+    decode::{
+        BatchStats, Executor, Options, Progress, SpecialTokens, Stats, generate_in_cache_observed,
+        rate,
+    },
     model::Model,
+    prefix::{CacheOptions, CachePool, Checkout, SlotInfo},
     tokenizer::TextCodec,
 };
 use anyhow::{Result, ensure};
@@ -41,19 +46,34 @@ pub struct ServeConfig {
     pub listen: SocketAddr,
     pub max_context: usize,
     pub queue_capacity: usize,
+    pub parallel: usize,
+    pub batch_wait_us: u64,
     pub model_id: String,
     pub model_path: PathBuf,
     pub ui_dir: Option<PathBuf>,
     pub defaults: Options,
+    pub cache: CacheOptions,
 }
 struct Info {
     model_id: String,
+    model_family: &'static str,
     model_path: PathBuf,
     max_context: usize,
     vocab_size: usize,
     trained_context: usize,
     defaults: Options,
     ui_dir: Option<PathBuf>,
+    cache: CacheOptions,
+    cache_budget_bytes: usize,
+    parallel: usize,
+    batch_wait_us: u64,
+}
+impl Info {
+    fn accepts_model(&self, id: &str) -> bool {
+        id == self.model_id
+            || id == format!("inclusionAI/{}", self.model_family)
+            || id == format!("minnow-{}", self.model_family.to_ascii_lowercase())
+    }
 }
 
 #[derive(Debug)]
@@ -130,15 +150,19 @@ impl Transport {
 struct Job {
     request: Prepared,
     transport: Transport,
+    queued: Option<tokio::sync::OwnedSemaphorePermit>,
 }
 #[derive(Clone)]
 struct App {
     tx: mpsc::Sender<Option<Job>>,
+    queue: Arc<tokio::sync::Semaphore>,
     healthy: Arc<AtomicBool>,
     stopping: Arc<AtomicBool>,
     codec: Arc<TextCodec>,
     info: Arc<Info>,
-    active: Arc<Mutex<Option<Value>>>,
+    active: Arc<Mutex<Vec<Option<Value>>>>,
+    cache_slots: Arc<Mutex<Vec<SlotInfo>>>,
+    batch_metrics: Arc<batching::Metrics>,
 }
 
 fn timings(stats: &Stats, text_tokens: usize) -> Value {
@@ -147,7 +171,7 @@ fn timings(stats: &Stats, text_tokens: usize) -> Value {
         "prompt_per_second":rate(stats.prefill_tokens,stats.prefill_seconds),
         "predicted_n":text_tokens,"predicted_ms":stats.decode_seconds*1000.0,
         "predicted_per_token_ms":if text_tokens>0 {stats.decode_seconds*1000.0/text_tokens as f64}else{0.0},
-        "predicted_per_second":rate(text_tokens,stats.decode_seconds),"cache_n":0})
+        "predicted_per_second":rate(text_tokens,stats.decode_seconds),"cache_n":stats.cached_tokens})
 }
 fn metadata(stats: &Stats, phase: &str, batch: Option<&BatchStats>, text_tokens: usize) -> Value {
     let mut value = serde_json::to_value(stats).unwrap();
@@ -161,6 +185,7 @@ fn metadata(stats: &Stats, phase: &str, batch: Option<&BatchStats>, text_tokens:
 }
 
 struct Emitter<'a> {
+    sequence: usize,
     job: &'a Job,
     app: &'a App,
     id: String,
@@ -193,8 +218,8 @@ impl Emitter<'_> {
         if self.job.request.include_usage {
             chunk["usage"] = Value::Null;
         }
-        *self.app.active.lock().unwrap() = Some(
-            json!({"id":0,"id_task":self.id,"is_processing":true,"n_ctx":self.app.info.max_context,"n_prompt_tokens":stats.prompt_tokens,"n_decoded":stats.completion_tokens,"minnow":chunk["minnow"]}),
+        self.app.active.lock().unwrap()[self.sequence] = Some(
+            json!({"id":self.sequence,"cache_slot":stats.cache_slot,"id_task":self.id,"is_processing":true,"n_ctx":self.app.info.max_context,"n_prompt_tokens":stats.prompt_tokens,"n_decoded":stats.completion_tokens,"minnow":chunk["minnow"]}),
         );
         self.job.transport.send(chunk, important)
     }
@@ -239,7 +264,14 @@ impl Emitter<'_> {
     }
 }
 
-fn execute(model: &Model, app: &App, job: &Job) -> Reply {
+fn execute(
+    model: &(impl Executor + ?Sized),
+    checkout: &mut Checkout,
+    app: &App,
+    job: &Job,
+    sequence: usize,
+    start: std::time::Instant,
+) -> Reply {
     let created = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
@@ -249,6 +281,7 @@ fn execute(model: &Model, app: &App, job: &Job) -> Reply {
         NEXT_ID.fetch_add(1, Ordering::Relaxed)
     );
     let mut emitter = Emitter {
+        sequence,
         job,
         app,
         id,
@@ -268,30 +301,42 @@ fn execute(model: &Model, app: &App, job: &Job) -> Reply {
             Value::Null,
         );
         job.transport.send(initial, true)?;
-        let result = generate_observed(
+        let result = generate_in_cache_observed(
             model,
             &job.request.ids,
             &job.request.options,
             SpecialTokens::default(),
+            (checkout, start),
             || job.transport.closed() || app.stopping.load(Ordering::Acquire),
             |event| {
                 match event {
                     Progress::Prefill {
+                        cached,
+                        slot,
                         processed,
                         total,
                         seconds,
                     } => {
-                        if job.request.progress && total > 0 {
-                            let mut chunk = emitter.chunk(json!({}), Value::Null);
-                            chunk["prompt_progress"] = json!({"cache":0,"processed":processed,"total":total,"time_ms":seconds*1000.0});
-                            chunk["minnow"] = json!({"phase":"prefill","prompt_tokens":job.request.ids.len(),"prefill_tokens":processed,"prefill_total":total});
-                            job.transport.send(chunk, processed == total)?;
+                        app.active.lock().unwrap()[sequence] =
+                            Some(json!({"id":sequence,"cache_slot":slot,
+                            "is_processing":true,"n_ctx":app.info.max_context,
+                            "n_prompt_tokens":job.request.ids.len(),"cached_tokens":cached,
+                            "n_prompt_processed":processed}));
+                        if job.request.progress {
+                            if total > cached {
+                                let mut chunk = emitter.chunk(json!({}), Value::Null);
+                                chunk["prompt_progress"] = json!({"cache":cached,"processed":processed,"total":total,"time_ms":seconds*1000.0});
+                                chunk["minnow"] = json!({"phase":"prefill","prompt_tokens":job.request.ids.len(),"cached_tokens":cached,"prefill_tokens":processed-cached,"prefill_total":total});
+                                job.transport.send(chunk, processed == total)?;
+                            }
                             if processed == total {
                                 // The current UI clears its preparing state on a timing
                                 // event without prompt_progress. Do not invent a token.
                                 let stats = Stats {
                                     prompt_tokens: job.request.ids.len(),
-                                    prefill_tokens: total,
+                                    prefill_tokens: total - cached,
+                                    cached_tokens: cached,
+                                    cache_slot: slot,
                                     prefill_seconds: seconds,
                                     ..Stats::default()
                                 };
@@ -340,7 +385,7 @@ fn execute(model: &Model, app: &App, job: &Job) -> Reply {
         } else {
             "stop"
         };
-        let usage = json!({"prompt_tokens":job.request.ids.len(),"completion_tokens":result.token_ids.len(),"total_tokens":job.request.ids.len()+result.token_ids.len(),"prompt_tokens_details":{"cached_tokens":0}});
+        let usage = json!({"prompt_tokens":job.request.ids.len(),"completion_tokens":result.token_ids.len(),"total_tokens":job.request.ids.len()+result.token_ids.len(),"prompt_tokens_details":{"cached_tokens":result.stats.cached_tokens}});
         let timing = timings(&result.stats, emitter.text_tokens);
         let mut meta = metadata(
             &result.stats,
@@ -387,7 +432,10 @@ async fn submit(app: App, body: Value, kind: Kind) -> std::result::Result<Respon
     let request = tokio::task::spawn_blocking(move || request::prepare(body, kind, &codec, &info))
         .await
         .map_err(|_| ApiError::unavailable("request preparation failed"))??;
-    let enqueue = |job| {
+    let enqueue = |mut job: Job| {
+        job.queued = Some(app.queue.clone().try_acquire_owned().map_err(|_| {
+            ApiError::new(StatusCode::TOO_MANY_REQUESTS, "inference queue is full")
+        })?);
         app.tx.try_send(Some(job)).map_err(|e| match e {
             mpsc::error::TrySendError::Full(_) => {
                 ApiError::new(StatusCode::TOO_MANY_REQUESTS, "inference queue is full")
@@ -402,6 +450,7 @@ async fn submit(app: App, body: Value, kind: Kind) -> std::result::Result<Respon
         enqueue(Job {
             request,
             transport: Transport::Stream(tx),
+            queued: None,
         })?;
         let mut response = Sse::new(ReceiverStream::new(rx))
             .keep_alive(
@@ -423,6 +472,7 @@ async fn submit(app: App, body: Value, kind: Kind) -> std::result::Result<Respon
         enqueue(Job {
             request,
             transport: Transport::Json(tx),
+            queued: None,
         })?;
         rx.await
             .map_err(|_| ApiError::unavailable("inference worker stopped"))?
@@ -456,7 +506,8 @@ async fn health(State(app): State<App>) -> std::result::Result<Json<Value>, ApiE
         return Err(ApiError::unavailable("inference worker unavailable"));
     }
     Ok(Json(
-        json!({"status":"ok","model":app.info.model_id,"max_context":app.info.max_context,"queued_requests":app.tx.max_capacity()-app.tx.capacity()}),
+        json!({"status":"ok","model":app.info.model_id,"max_context":app.info.max_context,"queued_requests":app.tx.max_capacity()-app.queue.available_permits(),
+            "parallel":app.info.parallel,"batching":app.batch_metrics.value()}),
     ))
 }
 fn model_info(info: &Info) -> Value {
@@ -469,7 +520,7 @@ async fn model_detail(
     State(app): State<App>,
     Path(id): Path<String>,
 ) -> std::result::Result<Json<Value>, ApiError> {
-    if id != app.info.model_id {
+    if !app.info.accepts_model(&id) {
         return Err(ApiError::new(StatusCode::NOT_FOUND, "unknown model"));
     }
     Ok(Json(model_info(&app.info)))
@@ -521,6 +572,17 @@ pub async fn serve(model: Model, codec: TextCodec, config: ServeConfig) -> Resul
         "queue-capacity must be between 1 and 1024"
     );
     config.defaults.validate(model.config.vocab_size)?;
+    ensure!(
+        (1..=64).contains(&config.parallel),
+        "parallel must be between 1 and 64"
+    );
+    ensure!(
+        config.batch_wait_us <= 10000,
+        "batch-wait-us must not exceed 10000"
+    );
+    let pool = CachePool::new(&model, config.max_context, config.cache.clone())?;
+    let cache_slots = Arc::new(Mutex::new(pool.snapshot()));
+    let cache_budget_bytes = pool.budget_bytes(&model);
     if let Some(dir) = &config.ui_dir {
         ensure!(
             dir.join("index.html").is_file(),
@@ -528,22 +590,30 @@ pub async fn serve(model: Model, codec: TextCodec, config: ServeConfig) -> Resul
         );
     }
     let listener = tokio::net::TcpListener::bind(config.listen).await?;
-    let (tx, mut rx) = mpsc::channel::<Option<Job>>(config.queue_capacity);
+    let (tx, rx) = mpsc::channel::<Option<Job>>(config.queue_capacity);
     let app = App {
         tx,
+        queue: Arc::new(tokio::sync::Semaphore::new(config.queue_capacity)),
         healthy: Arc::new(AtomicBool::new(true)),
         stopping: Arc::new(AtomicBool::new(false)),
         codec: Arc::new(codec),
         info: Arc::new(Info {
             model_id: config.model_id,
+            model_family: model.config.model_family(),
             model_path: config.model_path,
             max_context: config.max_context,
             vocab_size: model.config.vocab_size,
             trained_context: model.config.max_position_embeddings,
             defaults: config.defaults,
             ui_dir: config.ui_dir,
+            cache: config.cache,
+            cache_budget_bytes,
+            parallel: config.parallel,
+            batch_wait_us: config.batch_wait_us,
         }),
-        active: Arc::new(Mutex::new(None)),
+        active: Arc::new(Mutex::new(vec![None; config.parallel])),
+        cache_slots,
+        batch_metrics: Arc::new(batching::Metrics::default()),
     };
     let worker = app.clone();
     let worker_tx = worker.tx.clone();
@@ -557,30 +627,7 @@ pub async fn serve(model: Model, codec: TextCodec, config: ServeConfig) -> Resul
                 }
             }
             let _guard = Guard(worker.healthy.clone());
-            while let Some(Some(job)) = rx.blocking_recv() {
-                if worker.stopping.load(Ordering::Acquire) {
-                    break;
-                }
-                if job.transport.closed() {
-                    continue;
-                }
-                *worker.active.lock().unwrap() =
-                    Some(json!({"id":0,"is_processing":true,"n_ctx":worker.info.max_context}));
-                let result = execute(&model, &worker, &job);
-                *worker.active.lock().unwrap() = None;
-                match job.transport {
-                    Transport::Json(reply) => {
-                        let _ = reply.send(result);
-                    }
-                    Transport::Stream(reply) => {
-                        if let Err(error) = result {
-                            let _ = reply
-                                .try_send(Ok(Event::default().data(error.value().to_string())));
-                        }
-                        let _ = reply.try_send(Ok(Event::default().data("[DONE]")));
-                    }
-                }
-            }
+            batching::run(Arc::new(model), pool, worker, rx);
         })?;
     let stopping = app.stopping.clone();
     let shutdown = stopping.clone();

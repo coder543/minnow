@@ -29,6 +29,9 @@ tokio-stream = "0.1"
 tower-http = { version = "0.6", features = ["fs", "set-header"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rmp-serde = "1.3"
+blake3 = "1.8"
+rayon = "1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

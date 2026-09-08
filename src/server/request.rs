@@ -18,6 +18,7 @@ pub struct Prepared {
     pub stream: bool,
     pub include_usage: bool,
     pub progress: bool,
+    pub cache_prompt: bool,
     pub stops: Vec<String>,
     pub tools: Vec<Value>,
     pub required_tool: bool,
@@ -170,13 +171,7 @@ pub fn prepare(
         let model = model
             .as_str()
             .ok_or_else(|| ApiError::invalid("model must be a string"))?;
-        if ![
-            info.model_id.as_str(),
-            "inclusionAI/LLaDA2.2-mini",
-            "minnow-llada2.2-mini",
-        ]
-        .contains(&model)
-        {
+        if !info.accepts_model(model) {
             return Err(ApiError::invalid("unknown model; see /v1/models"));
         }
     }
@@ -250,6 +245,7 @@ pub fn prepare(
         "parallel_tool_calls",
         "response_format",
         "return_progress",
+        "cache_prompt",
         "timings_per_token",
         "sse_ping_interval",
         "reasoning_format",
@@ -379,16 +375,20 @@ pub fn prepare(
             "response_format supports text and json_object; JSON Schema constrained decoding is not implemented",
         ));
     }
-    let text = if kind == Kind::Completion {
+    let ids = if kind == Kind::Completion {
         if !body["messages"].is_null() || !tools.is_empty() {
             return Err(ApiError::invalid(
                 "use chat completions for messages and tools",
             ));
         }
-        body["prompt"]
-            .as_str()
-            .ok_or_else(|| ApiError::invalid("prompt must be a nonempty string"))?
-            .to_owned()
+        if let Some(text) = body["prompt"].as_str() {
+            codec
+                .encode(text)
+                .map_err(|e| ApiError::invalid(e.to_string()))?
+        } else {
+            serde_json::from_value::<Vec<u32>>(body["prompt"].clone())
+                .map_err(|_| ApiError::invalid("prompt must be a string or array of token IDs"))?
+        }
     } else {
         if !body["prompt"].is_null() {
             return Err(ApiError::invalid("use messages for chat"));
@@ -397,14 +397,19 @@ pub fn prepare(
         if json_object {
             messages.insert(0,json!({"role":"system","content":"Respond with one valid JSON object, without markdown fences or other text."}));
         }
-        codec
+        let text = codec
             .chat_prompt_with_tools(&messages, &tools, true)
             .map_err(|e| ApiError::invalid(e.to_string()))?
-            + &assistant_prefix
+            + &assistant_prefix;
+        codec
+            .encode(&text)
+            .map_err(|e| ApiError::invalid(e.to_string()))?
     };
-    let ids = codec
-        .encode(&text)
-        .map_err(|e| ApiError::invalid(e.to_string()))?;
+    if ids.iter().any(|&id| id as usize >= info.vocab_size) {
+        return Err(ApiError::invalid(
+            "prompt contains token IDs outside the vocabulary",
+        ));
+    }
     if ids.is_empty() {
         return Err(ApiError::invalid("prompt must not be empty"));
     }
@@ -464,6 +469,7 @@ pub fn prepare(
         ));
     }
     Ok(Prepared {
+        cache_prompt: boolean(&body, "cache_prompt", true)?,
         kind,
         ids,
         options,

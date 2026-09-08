@@ -1,0 +1,523 @@
+{
+  "hardware": "NVIDIA GB10 (compute capability 12.1)",
+  "cuda_compiler": "13.0 V13.0.88",
+  "weights": "LLaDA2.2-mini native BF16",
+  "a": "compute_80",
+  "b": "compute_121",
+  "order": [
+    "a",
+    "b",
+    "b",
+    "a"
+  ],
+  "tests_per_target": 33,
+  "binaries": {
+    "a": {
+      "path": "/mnt/truenas/composer/workspace/minnow/artifacts/arch-comparison/minnow-compute80",
+      "sha256": "c1f4f48d41ed9e0cb8652ca06a9f5462cf001c823a0d89c1cb0d36c8e7ed4ddc"
+    },
+    "b": {
+      "path": "/mnt/truenas/composer/workspace/minnow/artifacts/arch-comparison/minnow-compute121",
+      "sha256": "117f87a205e128197771b17d17c8e3c04e53be546f63731310bfcc532de1863b"
+    }
+  },
+  "source_sha256": {
+    "src/config.rs": "6c1bbc1b453adf0a589aef7ec1da346d149e20df685ae84412eede2caec477c1",
+    "src/cuda/norm.rs": "91816d69fb409371b007854acd443afbc394954778f823764178c20c72c0a0bf",
+    "src/cuda/predict.rs": "842393522d0e5078979f5d47a7007b8bd00b76f6ff3caaf80c424253177286b9",
+    "src/cuda/qkv.cu": "805cafe037c8c53da57c1332d7caeb12f4932819dd6f4df7d0e70cd57f4fee7e",
+    "src/cuda/qkv.rs": "b74e52ac744861abb636cbaf2b4a817a58dcd3220872abd902bab75f9a32420e",
+    "src/cuda/routed_experts.rs": "e3e5233f78f777b98fb2d3adbe52fe0befa168e417b4a11a1f7f54fa7e9679df",
+    "src/cuda/routing.cu": "7edf287bb31a47f43a957daf6101439c571f162cf1f0d100d801c070011d59c3",
+    "src/cuda/routing.rs": "10939b56587cc5d8ec35582e96516531d5d9bbbec5ce4073b4d5d9bbc1b4c423",
+    "src/cuda.rs": "151829ac6f330141d71cd0fdea65bd184ea836fe1515ba86b24517de75781cbe",
+    "src/decode.rs": "44672557897a07ecabba7e105327a6ce7bbb9e78b4cb10006c8ca005ac56be25",
+    "src/kernels.cu": "5b802873fe6a1d7cc4779b7767ead166cb2457e5414e6060a10ada3b7ed7d68e",
+    "src/lib.rs": "c5b36a1096870cc8a1a995dd0bef0f14675fe4ede130a4bd401feb624172af17",
+    "src/main.rs": "4605a90f8db31b9d2d4151ee1b974515320939edec115e0614b17ceb6be1a696",
+    "src/model.rs": "265d0fc4abc39bc02fbbbdd6b03c2ba2a6e4f80030a1069debea37a1c3e8cfdb",
+    "src/server/output.rs": "4765af79bd752a16cf07d77bc4b0b13923655f5381d984fd617e8ea427b44b1b",
+    "src/server/request.rs": "a5ed258f4c9f494a85e7df02761d9ffb8a1565144121878e2fa74ef7c1a1ef01",
+    "src/server/tests.rs": "a9f51f463ff57980c2cbecd70774a0bb0c110c20f29a81fc0adbc6196c9e6a64",
+    "src/server/webui.rs": "d0d16de2b88c1a1ec9fa7f7922302e000a40d2faf0496405fd6df77d9a98e0e5",
+    "src/server.rs": "f3d3cf83b2664449346facd7145b35495d0e14aba95d8381570c69b4e92b3494",
+    "src/tokenizer.rs": "89ab28bc2112167e2a80e31daaa68a57bfdf720bb906e9e48061638094e46d3f",
+    "src/weights.rs": "488f708dde75c8a2b6374bfeda35708795b8cd59aeebfdf75e6c90ede67943e4"
+  },
+  "build_rs_sha256": "acd8d5b88c070460bf3e4ea789a2255ec1e2c4d3981c1459cffb23f8cd33edf7",
+  "input_sha256": "fe1a1a9121c92213fae79aa643987950040d4ea58d52f0f747faee64376c0a2b",
+  "cases_sha256": "6878af10ccbef7d4833149aec3104fd6c1ad47dafc43b4e1722a322f73a7fa6b",
+  "results": {
+    "prefill": [
+      {
+        "prompt_tokens": 2048,
+        "a": {
+          "seconds": [
+            0.282146851,
+            0.281335343,
+            0.281495951,
+            0.281700145,
+            0.28108171,
+            0.288129571,
+            0.286183322,
+            0.285545464,
+            0.285201174,
+            0.285985098
+          ],
+          "rate_per_second": 7214.304144351879,
+          "mean_seconds": 0.2838804629,
+          "stdev_seconds": 0.002583275731046248,
+          "round_rates": [
+            7273.967153492072,
+            7155.611916279377
+          ]
+        },
+        "b": {
+          "seconds": [
+            0.284651019,
+            0.285299391,
+            0.284542491,
+            0.285148477,
+            0.285449503,
+            0.286075332,
+            0.285787074,
+            0.282795605,
+            0.285588417,
+            0.284366684
+          ],
+          "rate_per_second": 7186.711339250315,
+          "mean_seconds": 0.2849703993,
+          "stdev_seconds": 0.0009439031833548083,
+          "round_rates": [
+            7185.506648400201,
+            7187.916434114641
+          ]
+        },
+        "rate_change_percent": -0.38247354906939535
+      },
+      {
+        "prompt_tokens": 4096,
+        "a": {
+          "seconds": [
+            0.556322176,
+            0.555143738,
+            0.555726204,
+            0.557521925,
+            0.557809094,
+            0.564974995,
+            0.570502892,
+            0.568823396,
+            0.570084154,
+            0.568463763
+          ],
+          "rate_per_second": 7281.295805184673,
+          "mean_seconds": 0.5625372337,
+          "stdev_seconds": 0.0065674234518393985,
+          "round_rates": [
+            7360.226309593486,
+            7204.040228373704
+          ]
+        },
+        "b": {
+          "seconds": [
+            0.565053042,
+            0.562855111,
+            0.563972989,
+            0.565513155,
+            0.561963715,
+            0.56587265,
+            0.568127956,
+            0.563422464,
+            0.566779711,
+            0.564191922
+          ],
+          "rate_per_second": 7252.442177791065,
+          "mean_seconds": 0.5647752715,
+          "stdev_seconds": 0.001870533121500414,
+          "round_rates": [
+            7264.065050565136,
+            7240.856439971914
+          ]
+        },
+        "rate_change_percent": -0.3962705013723311
+      }
+    ],
+    "cached": [
+      {
+        "prefix_tokens": 0,
+        "a": {
+          "seconds": [
+            0.033184775,
+            0.03342087303333333
+          ],
+          "rate_per_second": 30.027483540120862,
+          "mean_seconds": 0.03330282401666666,
+          "stdev_seconds": 0.00016694652039480742,
+          "round_rates": [
+            30.1343010461876,
+            29.921420634422667
+          ]
+        },
+        "b": {
+          "seconds": [
+            0.033256654133333334,
+            0.0334140608
+          ],
+          "rate_per_second": 29.998178390615408,
+          "mean_seconds": 0.03333535746666667,
+          "stdev_seconds": 0.00011130332140396941,
+          "round_rates": [
+            30.069170397923294,
+            29.927520811837393
+          ]
+        },
+        "rate_change_percent": -0.09759442367622828
+      },
+      {
+        "prefix_tokens": 1024,
+        "a": {
+          "seconds": [
+            0.03356964556666667,
+            0.03383532716666667
+          ],
+          "rate_per_second": 29.671401365480456,
+          "mean_seconds": 0.03370248636666667,
+          "stdev_seconds": 0.00018786526099649523,
+          "round_rates": [
+            29.78881614981841,
+            29.554908544970814
+          ]
+        },
+        "b": {
+          "seconds": [
+            0.03374050383333334,
+            0.033768696
+          ],
+          "rate_per_second": 29.62559184433527,
+          "mean_seconds": 0.03375459991666667,
+          "stdev_seconds": 1.993487222633869e-05,
+          "round_rates": [
+            29.6379688027085,
+            29.613225219001645
+          ]
+        },
+        "rate_change_percent": -0.15438947618592325
+      },
+      {
+        "prefix_tokens": 4096,
+        "a": {
+          "seconds": [
+            0.035355410233333336,
+            0.0355891053
+          ],
+          "rate_per_second": 28.191044578495973,
+          "mean_seconds": 0.03547225776666667,
+          "stdev_seconds": 0.00016524736636984062,
+          "round_rates": [
+            28.28421430837176,
+            28.09848664557465
+          ]
+        },
+        "b": {
+          "seconds": [
+            0.03555562213333333,
+            0.03562314933333333
+          ],
+          "rate_per_second": 28.09826523820531,
+          "mean_seconds": 0.03558938573333333,
+          "stdev_seconds": 4.774894103454055e-05,
+          "round_rates": [
+            28.124947336036115,
+            28.07163371892779
+          ]
+        },
+        "rate_change_percent": -0.3291092674211682
+      }
+    ],
+    "decode": [
+      {
+        "name": "lhc",
+        "a": {
+          "seconds": [
+            6.824656276,
+            6.834620414000001,
+            6.835475439,
+            6.885405038,
+            6.890768447,
+            6.8867748220000005
+          ],
+          "rate_per_second": 42.7137566330675,
+          "mean_seconds": 6.859616739333333,
+          "stdev_seconds": 0.030993158442584004,
+          "round_rates": [
+            42.889028101794814,
+            42.53991187221916
+          ],
+          "text_tokens": [
+            293,
+            293,
+            293,
+            293,
+            293,
+            293
+          ]
+        },
+        "b": {
+          "seconds": [
+            6.8762541960000005,
+            6.883837945,
+            6.881634832,
+            6.861175292,
+            6.866236088,
+            6.859861217
+          ],
+          "rate_per_second": 42.639889842954055,
+          "mean_seconds": 6.871499928333334,
+          "stdev_seconds": 0.01046242534613208,
+          "round_rates": [
+            42.58364627871294,
+            42.696282174263764
+          ],
+          "text_tokens": [
+            293,
+            293,
+            293,
+            293,
+            293,
+            293
+          ]
+        },
+        "rate_change_percent": -0.17293442660170077,
+        "identical_tokens_and_work": true,
+        "output_sha256": "68f1d2c9e2b798955f00a9b46dea0a7161aa27c93147459290030498130a6e14",
+        "counters": {
+          "blocks": 10,
+          "denoise_forwards": 203,
+          "commit_forwards": 0,
+          "reused_commits": 9,
+          "total_forwards": 203,
+          "processed_tokens": 6496
+        }
+      },
+      {
+        "name": "react_typescript",
+        "a": {
+          "seconds": [
+            7.889998610999999,
+            7.894164061,
+            7.8944295570000005,
+            7.9460466059999995,
+            7.944018333000001,
+            7.947514163
+          ],
+          "rate_per_second": 113.01415601421913,
+          "mean_seconds": 7.9193618885,
+          "stdev_seconds": 0.02909061255198122,
+          "round_rates": [
+            113.39356554785324,
+            112.6372769865177
+          ],
+          "text_tokens": [
+            895,
+            895,
+            895,
+            895,
+            895,
+            895
+          ]
+        },
+        "b": {
+          "seconds": [
+            7.934646442,
+            7.934523143,
+            7.935200329,
+            7.913286776,
+            7.91491482,
+            7.914899671
+          ],
+          "rate_per_second": 112.93976034094229,
+          "mean_seconds": 7.9245785301666665,
+          "stdev_seconds": 0.011204035921563426,
+          "round_rates": [
+            112.79441588667626,
+            113.08547985396586
+          ],
+          "text_tokens": [
+            895,
+            895,
+            895,
+            895,
+            895,
+            895
+          ]
+        },
+        "rate_change_percent": -0.06582863235954362,
+        "identical_tokens_and_work": true,
+        "output_sha256": "a0a746fbe9fce44c8d44885e51a7891bea0499078109c406bc0bdd95212cc02e",
+        "counters": {
+          "blocks": 29,
+          "denoise_forwards": 238,
+          "commit_forwards": 0,
+          "reused_commits": 28,
+          "total_forwards": 238,
+          "processed_tokens": 7616
+        }
+      },
+      {
+        "name": "fellowship",
+        "a": {
+          "seconds": [
+            18.680857672000002,
+            18.682448849,
+            18.676196555,
+            18.787818136,
+            18.782504742,
+            18.784925968000003
+          ],
+          "rate_per_second": 40.03745658091688,
+          "mean_seconds": 18.73245865366667,
+          "stdev_seconds": 0.05770817608134007,
+          "round_rates": [
+            40.15024895828539,
+            39.92529615384178
+          ],
+          "text_tokens": [
+            750,
+            750,
+            750,
+            750,
+            750,
+            750
+          ]
+        },
+        "b": {
+          "seconds": [
+            18.766097112,
+            18.759644254999998,
+            18.758375603,
+            18.715678465,
+            18.711366844,
+            18.705282611
+          ],
+          "rate_per_second": 40.02973056480544,
+          "mean_seconds": 18.736074148333334,
+          "stdev_seconds": 0.028031541924271413,
+          "round_rates": [
+            39.975753749486245,
+            40.08385334039073
+          ],
+          "text_tokens": [
+            750,
+            750,
+            750,
+            750,
+            750,
+            750
+          ]
+        },
+        "rate_change_percent": -0.01929697031535227,
+        "identical_tokens_and_work": true,
+        "output_sha256": "c2e805df6154396c71de79a50bc374ca53c559a805ff8030878dcddc8ac21d92",
+        "counters": {
+          "blocks": 25,
+          "denoise_forwards": 563,
+          "commit_forwards": 1,
+          "reused_commits": 23,
+          "total_forwards": 564,
+          "processed_tokens": 18048
+        }
+      }
+    ]
+  },
+  "memory": {
+    "command": [
+      "python3",
+      "scripts/bench_cuda_arch.py",
+      "--a",
+      "artifacts/arch-comparison/minnow-compute80",
+      "--b",
+      "artifacts/arch-comparison/minnow-compute121",
+      "--input",
+      "tests/prefill_benchmark_ids.json"
+    ],
+    "exit_code": 0,
+    "abort_reason": null,
+    "elapsed_seconds": 697.6772093689651,
+    "baseline": {
+      "available_bytes": 124753244160,
+      "used_bytes": 5909925888,
+      "pswpin": 635042,
+      "pswpout": 2598806
+    },
+    "peak_used_bytes": 40984162304,
+    "peak_growth_bytes": 35074236416,
+    "final": {
+      "available_bytes": 124787798016,
+      "used_bytes": 5875372032,
+      "pswpin": 635050,
+      "pswpout": 2598806
+    }
+  },
+  "gpu_samples": [
+    {
+      "round": 1,
+      "mode": "prefill",
+      "before": "49, 11.75 W, 2405 MHz"
+    },
+    {
+      "round": 1,
+      "mode": "cached",
+      "before": "53, 44.51 W, 2405 MHz"
+    },
+    {
+      "round": 1,
+      "mode": "decode",
+      "before": "53, 40.01 W, 2411 MHz"
+    },
+    {
+      "round": 2,
+      "mode": "prefill",
+      "before": "63, 36.99 W, 2398 MHz"
+    },
+    {
+      "round": 2,
+      "mode": "cached",
+      "before": "61, 34.14 W, 2411 MHz"
+    },
+    {
+      "round": 2,
+      "mode": "decode",
+      "before": "60, 35.31 W, 2411 MHz"
+    },
+    {
+      "round": 3,
+      "mode": "prefill",
+      "before": "66, 42.84 W, 2398 MHz"
+    },
+    {
+      "round": 3,
+      "mode": "cached",
+      "before": "65, 51.44 W, 2398 MHz"
+    },
+    {
+      "round": 3,
+      "mode": "decode",
+      "before": "62, 34.11 W, 2411 MHz"
+    },
+    {
+      "round": 4,
+      "mode": "prefill",
+      "before": "67, 33.92 W, 2398 MHz"
+    },
+    {
+      "round": 4,
+      "mode": "cached",
+      "before": "66, 47.76 W, 2398 MHz"
+    },
+    {
+      "round": 4,
+      "mode": "decode",
+      "before": "64, 41.15 W, 2398 MHz"
+    }
+  ]
+}

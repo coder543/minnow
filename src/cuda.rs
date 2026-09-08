@@ -20,6 +20,8 @@ pub use routing::{RoutingPlan, route_mini};
 mod routed_experts;
 pub use routed_experts::{mix_routed_experts, routed_expert_gemm};
 mod qkv;
+pub mod quantized;
+pub mod workspace;
 pub use qkv::prepare_qkv;
 use std::ffi::c_void;
 
@@ -44,7 +46,7 @@ impl CustomOp1 for BlockSoftmax {
             || !rows.is_multiple_of(self.queries)
             || self.offset.checked_add(self.queries) != Some(cols)
             || cols == 0
-            || cols > 8192
+            || cols > 131072
             || heads * rows > u32::MAX as usize
             || !self.queries.is_multiple_of(self.block_size)
             || !self.offset.is_multiple_of(self.block_size)
@@ -60,8 +62,14 @@ impl CustomOp1 for BlockSoftmax {
         // SAFETY: every attention probability is written by the kernel.
         let mut out = unsafe { dev.alloc::<bf16>(n)? };
         let items = cols.div_ceil(128).next_power_of_two();
+        let long = cols > 8192;
+        let name = if long {
+            "minnow_block_softmax_long".to_owned()
+        } else {
+            format!("minnow_block_softmax_{items}")
+        };
         let func = dev.get_or_load_custom_func(
-            &format!("minnow_block_softmax_{items}"),
+            &name,
             "minnow-v1",
             include_str!(concat!(env!("OUT_DIR"), "/minnow.ptx")),
         )?;
@@ -81,11 +89,11 @@ impl CustomOp1 for BlockSoftmax {
             .arg(&block_size)
             .arg(&self.scale);
         // SAFETY: contiguous inputs, matching output size, and checked row/column
-        // bounds. The template covers all columns using exactly 128 threads.
+        // bounds. Each CTA writes one complete row.
         unsafe {
             builder.launch(LaunchConfig {
                 grid_dim: ((heads * rows) as u32, 1, 1),
-                block_dim: (128, 1, 1),
+                block_dim: (if long { 256 } else { 128 }, 1, 1),
                 shared_mem_bytes: 0,
             })
         }
@@ -591,7 +599,17 @@ mod tests {
     #[ignore = "requires a CUDA GPU"]
     fn fused_block_softmax_matches_explicit_scaling_mask_and_fp32_softmax() -> Result<()> {
         let dev = Device::new_cuda(0)?;
-        for (queries, offset) in [(32, 0), (96, 64), (512, 0), (2048, 2048), (32, 8160)] {
+        for (queries, offset) in [
+            (32, 0),
+            (96, 64),
+            (512, 0),
+            (2048, 2048),
+            (32, 8160),
+            (32, 8192),
+            (96, 8192),
+            (128, 18432),
+            (32, 131040),
+        ] {
             let cols = queries + offset;
             let n = 2 * queries * cols;
             let raw = Tensor::arange(0f32, n as f32, &dev)?

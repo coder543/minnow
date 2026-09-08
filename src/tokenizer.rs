@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow, ensure};
 use minijinja::{Environment, context};
 use serde_json::Value;
-use std::{fs, path::Path};
+use std::path::Path;
 use tokenizers::Tokenizer;
 
 pub struct TextCodec {
@@ -37,8 +37,9 @@ impl TextCodec {
         }
     }
     pub fn load(path: &Path) -> Result<Self> {
-        let tokenizer = Tokenizer::from_file(path.join("tokenizer.json"))
-            .map_err(|e| anyhow!("tokenizer: {e}"))?;
+        let tokenizer =
+            Tokenizer::from_bytes(crate::container::asset(path, "tokenizer.json")?.as_bytes())
+                .map_err(|e| anyhow!("tokenizer: {e}"))?;
         let mut template = Environment::new();
         template.set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback);
         template.add_function(
@@ -50,7 +51,7 @@ impl TextCodec {
                 ))
             },
         );
-        let chat_template = fs::read_to_string(path.join("chat_template.jinja"))?;
+        let chat_template = crate::container::asset(path, "chat_template.jinja")?;
         template.add_template_owned("chat", chat_template.clone())?;
         Ok(Self {
             tokenizer,

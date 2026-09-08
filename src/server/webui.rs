@@ -12,7 +12,7 @@ async fn props(State(app): State<App>) -> Json<Value> {
     let o = &app.info.defaults;
     Json(json!({
         "role":"model","model_alias":app.info.model_id,"model_path":app.info.model_path,
-        "total_slots":1,"modalities":{"vision":false,"audio":false,"video":false},
+        "total_slots":app.info.parallel,"modalities":{"vision":false,"audio":false,"video":false},
         "chat_template":app.codec.chat_template,"chat_template_caps":{"supports_tools":true,"supports_parallel_tool_calls":true},
         "bos_token":"","eos_token":"<|endoftext|>","build_info":concat!("minnow ",env!("CARGO_PKG_VERSION")),
         "is_sleeping":false,"endpoint_slots":true,"endpoint_props":false,"endpoint_metrics":false,
@@ -28,14 +28,33 @@ async fn props(State(app): State<App>) -> Json<Value> {
                 "threshold":o.threshold,"editing_threshold":o.editing_threshold,"max_post_steps":o.max_post_steps},
             "next_token":{"has_next_token":false,"has_new_line":false,"n_remain":0,"n_decoded":0,"stopping_word":""}},
         "minnow":{"block_size":32,"generation_defaults":o,"stream_resumption":false,"strict_tool_schemas":false,
+            "cache":app.info.cache,"cache_budget_bytes":app.info.cache_budget_bytes,"inference_workers":1,"parallel":app.info.parallel,"batch_wait_us":app.info.batch_wait_us,
             "statistics":{"evaluated_tokens":"32 times refinement forwards, including repeated positions","processed_tokens":"all transformer input positions, including prefill and commit refreshes","timings":"prefill counts complete prompt blocks; predicted counts non-special completion tokens"}}
     }))
 }
 async fn slots(State(app): State<App>) -> Json<Value> {
-    let active = app.active.lock().unwrap().clone().unwrap_or_else(
-        || json!({"id":0,"id_task":-1,"is_processing":false,"n_ctx":app.info.max_context}),
-    );
-    Json(json!([active]))
+    let active = app.active.lock().unwrap().clone();
+    let cached = app.cache_slots.lock().unwrap();
+    Json(Value::Array(
+        (0..app.info.parallel)
+            .map(|id| {
+                let mut value = if let Some(value) = active.get(id).and_then(Option::as_ref) {
+                    value.clone()
+                } else {
+                    json!({"id":id,"id_task":-1,"is_processing":false,"n_ctx":app.info.max_context})
+                };
+                let cache_id = if value["is_processing"] == true {
+                    value["cache_slot"].as_u64().map(|id| id as usize)
+                } else {
+                    Some(id)
+                };
+                if let Some(slot) = cache_id.and_then(|id| cached.get(id)) {
+                    value["cache"] = json!(slot);
+                }
+                value
+            })
+            .collect(),
+    ))
 }
 async fn tokenize(
     State(app): State<App>,

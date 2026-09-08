@@ -1,6 +1,7 @@
 # minnow implementation notes
 
-Target: LLaDA2.2-mini, native unquantized BF16, on NVIDIA GB10. Rust runtime
+Targets: LLaDA2.2-mini and LLaDA2.2-flash, with BF16 or mixed quantized experts,
+on NVIDIA GB10. Rust runtime
 with Candle; Python is used only for independent reference validation. The model
 checkout at `~/hf/inclusionAI/LLaDA2.2-mini` is read-only. The default working
 copy is `~/models/hf/inclusionAI/LLaDA2.2-mini`, on the local SSD.
@@ -23,7 +24,8 @@ copy is `~/models/hf/inclusionAI/LLaDA2.2-mini`, on the local SSD.
   inserted masks and preserve the prompt. Termination and edit suppression follow
   the checkpoint's joint decoder. A hard step limit must report non-convergence.
 - Logits are for the same positions, with no autoregressive shift.
-- Keep model weights resident across requests; caches belong to one request.
+- Keep one resident weight set across requests. A bounded LRU pool retains
+  independent conversation K/V slots; reuse requires exact complete token blocks.
 
 ## Work and verification
 
@@ -37,9 +39,8 @@ copy is `~/models/hf/inclusionAI/LLaDA2.2-mini`, on the local SSD.
    endpoints, and text chat/completion endpoints with the checkpoint template.
 5. Profile and improve material bottlenecks; record reproducible measurements.
 
-Future work: quantized expert weights for the 24 GB RTX 3090,
-FlashAttention and faster long-context attention, request batching, and verification
-of the larger flash checkpoint. Do not claim those are supported before testing.
+Future work includes FlashAttention, native low-bit activation/tensor-core paths,
+RTX 3090 hardware validation, and Responses API/session resumption.
 
 See [memory ownership](memory.md): no file-backed mmap, no complete host/CUDA
 weight duplication, no concurrent full-model validation. Use direct I/O and the
@@ -54,7 +55,7 @@ gathering/weighting/reduction and SiLU/multiply are fused, preserving their BF16
 rounding and reduction order.
 
 RMSNorm now fuses the FP32 cast, square/reduction, normalization, BF16 cast, and
-learned scale. The mini QKV kernel also combines head normalization, partial RoPE,
+learned scale. The mini/flash QKV kernel also combines head normalization, partial RoPE,
 and the transpose to head-major storage. Both retain the original reduction tree
 and BF16 rounding points. Only one pair of RoPE tables is retained per request,
 replaced when the current block's position or length changes.
@@ -76,14 +77,30 @@ Transformer prefill batches and attention query tiles are independent. A query
 tile sees only committed keys and keys up to its own final block. This avoids
 computing attention to later tiles and bounds score storage without repeatedly
 visiting transformer weights. The block-softmax kernel keeps scaling, masking,
-and FP32 reductions in registers, for key lengths up to 8,192. It preserves the
+and FP32 reductions in registers, for key lengths up to 131,072. It preserves the
 BF16 score/probability rounding points, with a different FP32 reduction tree.
-Larger key lengths use bounded eager attention. This is tiled explicit attention,
+Beyond 8,192 keys, a bounded-register kernel makes multiple passes over BF16
+scores. This is tiled explicit attention,
 not FlashAttention: QK scores and probabilities are still materialized in BF16.
 
 The BF16 path can differ from eager Transformers because GEMM
 shapes and accumulation order change; full FP32 reference comparisons and small
 generation checks are recorded in [results](results.md).
+
+Continuous batching uses bounded host decoder threads that yield transformer
+segments to one GPU worker. Dense/MoE/head work concatenates token rows while
+attention and RoPE operate independently per sequence. Only complete blocks can
+be combined, so block-level expert capacity never spans two conversations.
+Admission reserves K/V before launching a decoder; success returns the prefix,
+failure discards it and releases its reservation. The CUDA allocator retains a
+configurable bounded amount of scratch across the decoder's synchronizations.
+
+The [self-contained format](model-format.md) stores aligned original or quantized
+payloads and a checksummed MessagePack manifest. Quantized expert GEMMs use
+BF16 tensor-core operands and FP32 accumulation, with code/scale dequantization
+in registers. Optional lossless fragment packing makes weight loads coalesced.
+Mixed layer/projection precision shares the same expert gather/mix pipeline.
+Shared experts, attention, routers, embeddings, and the head retain source precision.
 
 ## Sources
 

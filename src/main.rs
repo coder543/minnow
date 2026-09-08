@@ -54,11 +54,30 @@ struct Cli {
     /// Maximum query tile; reduced automatically to bound attention workspace.
     #[arg(long, global = true, default_value_t = 1024)]
     attention_chunk_tokens: usize,
+    /// Reuse up to this much unused CUDA allocation storage between forwards.
+    #[arg(long, global = true, default_value_t = 2048)]
+    workspace_cache_mib: usize,
     #[command(subcommand)]
     command: Command,
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Convert a checkpoint to a self-contained .mnw file using bounded direct I/O.
+    Convert {
+        output: PathBuf,
+        /// Quantize routed expert projections; other weights retain their dtype.
+        #[arg(long, value_parser = ["original", "int8", "fp4"], default_value = "original")]
+        experts: String,
+        /// Quantization group size (default: 128 for INT8, 32 for FP4).
+        #[arg(long, default_value_t = 0)]
+        group_size: usize,
+        /// CUDA fragment packing is lossless; row layout is available for comparisons.
+        #[arg(long, value_parser = ["mma", "row"], default_value = "mma")]
+        quant_layout: String,
+        /// JSON array of tensor-prefix rules for mixed precision; later rules win.
+        #[arg(long)]
+        tensor_rules: Option<PathBuf>,
+    },
     /// Read configuration without loading weights.
     Inspect,
     /// Encode a raw or chat prompt without loading weights.
@@ -105,12 +124,20 @@ enum Command {
         max_context: Option<usize>,
         #[arg(long, default_value_t = 8)]
         queue_capacity: usize,
-        /// Model ID advertised to API clients and the UI.
-        #[arg(long, default_value = "minnow-llada2.2-mini")]
-        alias: String,
+        /// Maximum concurrent requests sharing transformer batches.
+        #[arg(long, default_value_t = 4)]
+        parallel: usize,
+        /// Maximum wait to combine ready requests into one GPU invocation.
+        #[arg(long, default_value_t = 200)]
+        batch_wait_us: u64,
+        /// Model ID advertised to clients; defaults to the mini/flash architecture.
+        #[arg(long)]
+        alias: Option<String>,
         /// Serve a built UI directory directly, without embedding or copying it.
         #[arg(long)]
         ui_dir: Option<PathBuf>,
+        #[command(flatten)]
+        cache: minnow::prefix::CacheOptions,
         /// Default decoding settings; requests can override these.
         #[command(flatten)]
         options: Options,
@@ -209,6 +236,42 @@ async fn main() -> Result<()> {
             .join("models/hf/inclusionAI/LLaDA2.2-mini")
     });
     match &cli.command {
+        Command::Convert {
+            output,
+            experts,
+            group_size,
+            quant_layout,
+            tensor_rules,
+        } => {
+            use minnow::container::{Conversion, Encoding, convert};
+            let options = Conversion {
+                expert_encoding: match experts.as_str() {
+                    "int8" => Some(if quant_layout == "mma" {
+                        Encoding::I8Mma
+                    } else {
+                        Encoding::I8Sym
+                    }),
+                    "fp4" => Some(if quant_layout == "mma" {
+                        Encoding::Fp4Mma
+                    } else {
+                        Encoding::Fp4E2m1
+                    }),
+                    _ => None,
+                },
+                group_size: *group_size,
+                rules: match tensor_rules {
+                    Some(path) => serde_json::from_slice(&fs::read(path)?)?,
+                    None => vec![],
+                },
+            };
+            let start = Instant::now();
+            let container = convert(&model_path, output, &options)?;
+            println!(
+                "{}",
+                json!({"path":output,"file_bytes":container.file_bytes,"weight_bytes":container.manifest.weight_bytes(),"tensors":container.manifest.tensors.len(),"seconds":start.elapsed().as_secs_f64()})
+            );
+            return Ok(());
+        }
         Command::Inspect => {
             println!(
                 "{}",
@@ -235,6 +298,7 @@ async fn main() -> Result<()> {
     };
     let start = Instant::now();
     let mut model = Model::load(&model_path, dtype, &device)?;
+    model.set_workspace_cache_mib(cli.workspace_cache_mib)?;
     model.set_batched_experts(!cli.serial_experts);
     model.set_compact_decode_experts(cli.compact_decode_experts);
     model.set_fused_activation(!cli.unfused_activation);
@@ -400,12 +464,21 @@ async fn main() -> Result<()> {
             listen,
             max_context,
             queue_capacity,
+            parallel,
+            batch_wait_us,
             alias,
             ui_dir,
+            cache,
             options,
         } => {
             let codec = TextCodec::load(&model_path)?;
             let max_context = max_context.unwrap_or(model.config.max_position_embeddings);
+            let alias = alias.unwrap_or_else(|| {
+                format!(
+                    "minnow-{}",
+                    model.config.model_family().to_ascii_lowercase()
+                )
+            });
             minnow::server::serve(
                 model,
                 codec,
@@ -413,10 +486,13 @@ async fn main() -> Result<()> {
                     listen,
                     max_context,
                     queue_capacity,
+                    parallel,
+                    batch_wait_us,
                     model_id: alias,
                     model_path,
                     ui_dir,
                     defaults: options,
+                    cache,
                 },
             )
             .await?;
@@ -445,8 +521,10 @@ async fn main() -> Result<()> {
                 model.set_prefill_chunk_tokens(chunk_size)?;
                 for &n in &tokens {
                     ensure!(
-                        n > 0 && n <= 8192 && n.is_multiple_of(model.config.block_size),
-                        "prefill benchmark requires whole blocks, up to 8192 tokens"
+                        n > 0
+                            && n <= model.config.max_position_embeddings
+                            && n.is_multiple_of(model.config.block_size),
+                        "prefill benchmark requires whole blocks within model context"
                     );
                     let prompt: Vec<u32> = seed.iter().copied().cycle().take(n).collect();
                     let mut times = Vec::new();
