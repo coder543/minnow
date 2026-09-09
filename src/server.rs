@@ -72,6 +72,7 @@ struct Info {
 impl Info {
     fn accepts_model(&self, id: &str) -> bool {
         id == self.model_id
+            || id == self.model_family.to_ascii_lowercase()
             || id == format!("inclusionAI/{}", self.model_family)
             || id == format!("minnow-{}", self.model_family.to_ascii_lowercase())
     }

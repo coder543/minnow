@@ -185,6 +185,28 @@ fn tool_choice_and_history_are_validated() {
     assert!(request::messages(&bad).is_err());
 }
 
+#[test]
+fn chat_accepts_family_aliases_without_accepting_other_models() {
+    let (app, _rx) = app();
+    for model in [
+        "test",
+        "llada2.2-mini",
+        "minnow-llada2.2-mini",
+        "inclusionAI/LLaDA2.2-mini",
+    ] {
+        assert!(request::prepare(
+            json!({"model":model,"messages":[{"role":"user","content":"hello"}],"max_tokens":1}),
+            Kind::Chat, &app.codec, &app.info,
+        ).is_ok(), "rejected alias {model}");
+    }
+    for model in ["llada2.2-flash", "unknown"] {
+        assert!(request::prepare(
+            json!({"model":model,"messages":[{"role":"user","content":"hello"}],"max_tokens":1}),
+            Kind::Chat, &app.codec, &app.info,
+        ).is_err());
+    }
+}
+
 async fn body(response: Response) -> (StatusCode, Vec<u8>) {
     (
         response.status(),
