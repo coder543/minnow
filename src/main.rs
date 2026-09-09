@@ -70,9 +70,6 @@ struct Cli {
     /// Reuse up to this much unused CUDA allocation storage between forwards.
     #[arg(long, global = true, default_value_t = 2048)]
     workspace_cache_mib: usize,
-    /// System-memory headroom retained while loading (independent of GPU VRAM).
-    #[arg(long, global = true, default_value_t = minnow::weights::DEFAULT_MEMORY_RESERVE_MIB)]
-    memory_reserve_mib: u64,
     #[command(subcommand)]
     command: Command,
 }
@@ -355,8 +352,14 @@ async fn main() -> Result<()> {
         "INT8 expert activations require CUDA and BF16 model activations"
     );
     let start = Instant::now();
+    let (max_context, cache_max_mib) = match &cli.command {
+        Command::Serve {
+            max_context, cache, ..
+        } => (*max_context, cache.cache_max_mib),
+        _ => (None, None),
+    };
     let mut model =
-        Model::load_with_memory_reserve(&model_path, dtype, &device, cli.memory_reserve_mib)?;
+        Model::load_with_cache_budget(&model_path, dtype, &device, max_context, cache_max_mib)?;
     model.set_workspace_cache_mib(cli.workspace_cache_mib)?;
     model.set_int8_expert_activations(cli.int8_expert_activations)?;
     model.set_batched_experts(!cli.serial_experts);

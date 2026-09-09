@@ -67,12 +67,15 @@ through views. Four requests do not each reserve an entire maximum-context cache
 
 ## Diagnostic resource controls
 
-The loader checks available system memory before and during loading.
-`--memory-reserve-mib` sets the host headroom it retains, default 16384 (16 GiB).
-A deployment manager can choose a smaller reserve after budgeting for weights,
-K/V, working allocations, and other resident processes. This is a load-time
-check, not a runtime memory reservation or a replacement for GPU VRAM sizing
-on discrete GPUs. There is no cross-process model lock.
+Before allocating weights, the loader checks available memory on the selected
+target: CUDA device memory for CUDA execution, or system RAM for CPU execution.
+Weights in their loaded precision plus the full configured K/V budget must fit.
+The K/V budget defaults to one full model context, shared across slots;
+`serve --max-context` and `--cache-max-mib` adjust this sizing. Quantized weights
+include their scales, and CPU sizing accounts for FP32 floating weights and K/V.
+There is no fixed headroom requirement. K/V still allocates incrementally.
+This startup check does not reserve memory against other processes or account
+for transient activations and workspaces. There is no cross-process model lock.
 
 For large benchmarks, `scripts/memory_guard.py` runs a command with explicit
 system-memory growth and reserve budgets. It also monitors swap-out and Linux

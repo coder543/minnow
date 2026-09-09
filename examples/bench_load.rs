@@ -11,7 +11,7 @@ fn main() -> anyhow::Result<()> {
     anyhow::ensure!(args.len() == 2, "usage: bench_load CHECKPOINT");
     let device = Device::new_cuda(0)?;
     let start = Instant::now();
-    let model = Model::load_with_memory_reserve(Path::new(&args[1]), DType::BF16, &device, 4096)?;
+    let model = Model::load(Path::new(&args[1]), DType::BF16, &device)?;
     device.synchronize()?;
     println!(
         "{}",

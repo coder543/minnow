@@ -1,7 +1,7 @@
 //! Multiple resident conversation prefixes with exclusive active reservations. Only complete,
 //! committed blocks are eligible; each slot owns independent writable K/V.
 use crate::model::{Cache, Model};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use clap::Args;
 use serde::Serialize;
 use std::{
@@ -91,6 +91,58 @@ impl Checkout {
         })
     }
 }
+/// Shared sizing for pre-load admission and the lazily allocated runtime pool.
+pub(crate) fn cache_budget(
+    config: &crate::config::Config,
+    dtype: candle_core::DType,
+    max_context: usize,
+    cache_max_mib: Option<usize>,
+) -> Result<(usize, usize)> {
+    let b = config.block_size;
+    ensure!(
+        b > 0
+            && max_context > 0
+            && max_context <= config.max_position_embeddings
+            && max_context.is_multiple_of(b),
+        "invalid cache context limit"
+    );
+    let token_bytes = [
+        2,
+        config.num_hidden_layers,
+        config.num_key_value_heads,
+        config.head_dim,
+        dtype.size_in_bytes(),
+    ]
+    .into_iter()
+    .try_fold(1usize, |a, b| a.checked_mul(b))
+    .context("KV token size overflow")?;
+    ensure!(token_bytes > 0, "invalid KV dimensions");
+    let minimum_bytes = max_context
+        .checked_mul(token_bytes)
+        .context("KV cache size overflow")?;
+    let tokens = match cache_max_mib {
+        Some(mib) => {
+            mib.checked_mul(1024 * 1024)
+                .context("cache budget overflow")?
+                / token_bytes
+                / b
+                * b
+        }
+        None => max_context,
+    };
+    ensure!(
+        tokens >= max_context,
+        "cache-max-mib must fit at least one max-context K/V buffer ({} MiB)",
+        minimum_bytes.div_ceil(1024 * 1024)
+    );
+    Ok((
+        tokens,
+        tokens
+            .checked_mul(token_bytes)
+            .context("KV cache size overflow")?,
+    ))
+}
+
 impl CachePool {
     pub fn new(model: &Model, max_context: usize, options: CacheOptions) -> Result<Self> {
         ensure!(
@@ -102,28 +154,12 @@ impl CachePool {
                 && (0.0..=1.0).contains(&options.cache_reuse_threshold),
             "cache-reuse-threshold must be between zero and one"
         );
-        let b = model.config.block_size;
-        ensure!(
-            max_context > 0
-                && max_context <= model.config.max_position_embeddings
-                && max_context.is_multiple_of(b),
-            "invalid cache context limit"
-        );
-        let budget_tokens = match options.cache_max_mib {
-            Some(mib) => {
-                mib.checked_mul(1024 * 1024)
-                    .ok_or_else(|| anyhow::anyhow!("cache budget overflow"))?
-                    / model.kv_bytes_per_token()
-                    / b
-                    * b
-            }
-            None => max_context,
-        };
-        ensure!(
-            budget_tokens >= max_context,
-            "cache-max-mib must fit at least one max-context K/V buffer ({} MiB)",
-            (max_context * model.kv_bytes_per_token()).div_ceil(1024 * 1024)
-        );
+        let (budget_tokens, _) = cache_budget(
+            &model.config,
+            model.dtype(),
+            max_context,
+            options.cache_max_mib,
+        )?;
         Ok(Self {
             slots: (0..options.cache_slots)
                 .map(|_| Slot {
@@ -463,6 +499,48 @@ mod tests {
 
     fn fixture_model() -> Model {
         Model::load(Path::new("tests/fixtures/tiny"), DType::F32, &Device::Cpu).unwrap()
+    }
+    #[test]
+    fn cache_admission_sizes_full_context_and_configured_shared_budget() {
+        let mut config = crate::config::Config::load(Path::new("tests/fixtures/tiny")).unwrap();
+        config.block_size = 32;
+        config.max_position_embeddings = 131072;
+        config.num_hidden_layers = 20;
+        config.num_key_value_heads = 4;
+        config.head_dim = 128;
+        let gib = 1024 * 1024 * 1024;
+        assert_eq!(
+            cache_budget(&config, DType::BF16, 131072, None).unwrap(),
+            (131072, 5 * gib)
+        );
+        assert_eq!(
+            cache_budget(&config, DType::F32, 131072, None).unwrap(),
+            (131072, 10 * gib)
+        );
+        assert_eq!(
+            cache_budget(&config, DType::BF16, 32768, None).unwrap(),
+            (32768, 5 * gib / 4)
+        );
+        assert_eq!(
+            cache_budget(&config, DType::BF16, 131072, Some(10240)).unwrap(),
+            (262144, 10 * gib)
+        );
+        // Round an explicit budget down to whole blocks, as the pool does.
+        assert_eq!(
+            cache_budget(&config, DType::BF16, 131072, Some(5121)).unwrap(),
+            (131072, 5 * gib)
+        );
+        assert!(cache_budget(&config, DType::BF16, 131072, Some(5119)).is_err());
+        assert!(cache_budget(&config, DType::BF16, 131071, None).is_err());
+        assert!(cache_budget(&config, DType::BF16, 262144, None).is_err());
+        assert!(cache_budget(&config, DType::BF16, 131072, Some(usize::MAX)).is_err());
+        config.num_hidden_layers = 32;
+        assert_eq!(
+            cache_budget(&config, DType::BF16, 131072, None).unwrap(),
+            (131072, 8 * gib)
+        );
+        config.num_hidden_layers = usize::MAX;
+        assert!(cache_budget(&config, DType::BF16, 131072, None).is_err());
     }
     #[test]
     fn chunk_growth_preserves_kv_and_accounts_for_active_and_idle_caches() {

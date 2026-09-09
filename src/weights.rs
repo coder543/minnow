@@ -26,8 +26,6 @@ use buffer::WeightBuffer;
 
 const ALIGN: usize = 4096;
 pub const STAGING_BYTES: usize = 8 * 1024 * 1024;
-const LARGE_MODEL: u64 = 256 * 1024 * 1024;
-pub const DEFAULT_MEMORY_RESERVE_MIB: u64 = 16 * 1024;
 
 pub fn available_memory() -> Result<u64> {
     let mem = std::fs::read_to_string("/proc/meminfo")?;
@@ -41,6 +39,29 @@ pub fn available_memory() -> Result<u64> {
         .context("invalid MemAvailable")?
         .parse::<u64>()?
         * 1024)
+}
+
+/// Query the selected CUDA context, or available RAM for the CPU target.
+pub fn available_device_memory(device: &Device) -> Result<u64> {
+    match device {
+        Device::Cpu => available_memory(),
+        #[cfg(feature = "cuda")]
+        Device::Cuda(cuda) => Ok(cuda.cuda_stream().context().mem_get_info()?.0 as u64),
+        _ => bail!("memory accounting is not implemented for this device"),
+    }
+}
+fn check_memory_fit(weights: u64, kv: u64, available: u64) -> Result<()> {
+    let required = weights
+        .checked_add(kv)
+        .context("weights plus KV size overflow")?;
+    ensure!(
+        available >= required,
+        "target device needs {:.2} GiB for weights plus {:.2} GiB for the full KV cache; only {:.2} GiB available",
+        weights as f64 / 2f64.powi(30),
+        kv as f64 / 2f64.powi(30),
+        available as f64 / 2f64.powi(30)
+    );
+    Ok(())
 }
 
 #[derive(Clone, Debug)]
@@ -101,8 +122,6 @@ pub struct WeightLoader {
     staging: Mutex<Staging>,
     read_buffers: Mutex<Vec<Staging>>,
     read_pool: std::sync::OnceLock<Result<rayon::ThreadPool, String>>,
-    large: bool,
-    reserve_bytes: u64,
     pub elements: u64,
     timings: Mutex<ReadTimings>,
     verify_checksums: bool,
@@ -181,7 +200,6 @@ impl WeightLoader {
         let mut files = Vec::new();
         let mut tensors = HashMap::new();
         let mut elements = 0u64;
-        let mut total_bytes = 0u64;
         for name in names {
             ensure!(
                 Path::new(&name).file_name() == Some(std::ffi::OsStr::new(&name)),
@@ -252,7 +270,6 @@ impl WeightLoader {
                 elements = elements
                     .checked_add(n as u64)
                     .context("model size overflow")?;
-                total_bytes += bytes as u64;
                 ensure!(
                     tensors
                         .insert(
@@ -282,8 +299,6 @@ impl WeightLoader {
             staging: Mutex::new(Staging::new()?),
             read_buffers: Mutex::new(Vec::new()),
             read_pool: std::sync::OnceLock::new(),
-            large: total_bytes > LARGE_MODEL,
-            reserve_bytes: DEFAULT_MEMORY_RESERVE_MIB * 1024 * 1024,
             elements,
             timings: Mutex::new(ReadTimings::default()),
             verify_checksums: false,
@@ -324,8 +339,6 @@ impl WeightLoader {
                     .custom_flags(libc::O_DIRECT)
                     .open(path)?,
             ],
-            large: container.manifest.weight_bytes() > LARGE_MODEL,
-            reserve_bytes: DEFAULT_MEMORY_RESERVE_MIB * 1024 * 1024,
             tensors,
             staging: Mutex::new(Staging::new()?),
             read_buffers: Mutex::new(Vec::new()),
@@ -525,44 +538,37 @@ impl WeightLoader {
         };
         self.visit(name, &location, consume)
     }
-    pub fn set_memory_reserve_mib(&mut self, mib: u64) -> Result<()> {
-        self.reserve_bytes = mib
-            .checked_mul(1024 * 1024)
-            .context("memory reserve overflow")?;
-        Ok(())
-    }
-    pub fn check_memory(&self, dtype: DType) -> Result<()> {
-        if !self.large {
-            return Ok(());
-        }
-        let required = self.tensors.iter().try_fold(0u64, |sum, (name, t)| {
+    pub fn weight_bytes(&self, dtype: DType) -> Result<u64> {
+        self.tensors.iter().try_fold(0u64, |sum, (name, t)| {
             let bytes = if t.encoding.quantized() {
-                t.bytes as u64 + t.scales.as_ref().map_or(0, |s| s.bytes)
+                (t.bytes as u64)
+                    .checked_add(t.scales.as_ref().map_or(0, |s| s.bytes))
+                    .and_then(|bytes| {
+                        bytes.checked_add(if t.global_scale.is_some() { 4 } else { 0 })
+                    })
+                    .context("quantized weight size overflow")?
             } else {
-                let size = if name.ends_with(".gate.weight") {
+                let size = if name.ends_with(".gate.weight") || name.ends_with(".gate.expert_bias")
+                {
                     4
                 } else {
                     dtype.size_in_bytes()
                 };
-                t.bytes as u64 / t.dtype.size_in_bytes() as u64 * size as u64
+                (t.bytes as u64 / t.dtype.size_in_bytes() as u64)
+                    .checked_mul(size as u64)
+                    .context("floating weight size overflow")?
             };
             sum.checked_add(bytes).context("model size overflow")
-        })?;
-        let available = available_memory()?;
-        ensure!(
-            available
-                >= required
-                    .checked_add(self.reserve_bytes)
-                    .context("memory requirement overflow")?,
-            "loading needs {:.2} GiB for weights plus {:.2} GiB system headroom; only {:.2} GiB available",
-            required as f64 / 2f64.powi(30),
-            self.reserve_bytes as f64 / 2f64.powi(30),
-            available as f64 / 2f64.powi(30)
-        );
+        })
+    }
+    pub fn check_memory(&self, dtype: DType, device: &Device, kv_bytes: u64) -> Result<()> {
+        let weights = self.weight_bytes(dtype)?;
+        check_memory_fit(weights, kv_bytes, available_device_memory(device)?)?;
         tracing::info!(
-            weight_gib = required as f64 / 2f64.powi(30),
-            staging_mib = STAGING_BYTES / 1024 / 1024,
-            "loading one resident weight copy with direct I/O"
+            ?device,
+            weight_gib = weights as f64 / 2f64.powi(30),
+            kv_gib = kv_bytes as f64 / 2f64.powi(30),
+            "weights and full KV cache fit on target device"
         );
         Ok(())
     }
@@ -674,13 +680,6 @@ impl WeightLoader {
             parts.iter().all(|t| !t.encoding.quantized()),
             "quantized tensor {name} requires a quantized execution path"
         );
-        if self.large {
-            ensure!(
-                available_memory()? > self.reserve_bytes,
-                "memory headroom fell below {} MiB; stopping weight load",
-                self.reserve_bytes / (1024 * 1024)
-            );
-        }
         let mut out = self.buffer(name, false, shape.elem_count(), dtype, device)?;
         self.visit_parts(name, &parts, |index, is_scale, buffer| {
             ensure!(!is_scale, "unexpected scale for {name}");
@@ -723,6 +722,79 @@ mod tests {
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
+    #[test]
+    fn admission_requires_weights_and_kv_without_extra_headroom() {
+        assert!(check_memory_fit(100, 20, 120).is_ok());
+        assert!(check_memory_fit(100, 20, 119).is_err());
+        assert!(check_memory_fit(u64::MAX, 1, u64::MAX).is_err());
+        assert!(available_device_memory(&Device::Cpu).unwrap() > 0);
+    }
+
+    #[test]
+    fn resident_weight_size_counts_dtype_router_and_quantization_metadata() -> Result<()> {
+        let mut loader = WeightLoader::open(Path::new("tests/fixtures/tiny"))?;
+        let mut part = loader.tensors.values().next().unwrap().clone();
+        loader.tensors.clear();
+        part.dtype = DType::BF16;
+        part.encoding = Encoding::Bf16;
+        part.bytes = 512;
+        part.shape = vec![256];
+        loader.tensors.insert("dense.weight".into(), part.clone());
+        loader
+            .tensors
+            .insert("mlp.gate.weight".into(), part.clone());
+        loader
+            .tensors
+            .insert("mlp.gate.expert_bias".into(), part.clone());
+        assert_eq!(loader.weight_bytes(DType::BF16)?, 512 + 1024 + 1024);
+        assert_eq!(loader.weight_bytes(DType::F32)?, 3 * 1024);
+
+        for encoding in [
+            Encoding::I8Sym,
+            Encoding::I8Mma,
+            Encoding::I4Sym,
+            Encoding::I4Mma,
+            Encoding::Nvfp4,
+        ] {
+            part.encoding = encoding;
+            part.bytes = if encoding.int8() { 256 } else { 128 };
+            let native = encoding == Encoding::Nvfp4;
+            part.group_size = if native { 16 } else { 32 };
+            part.scales = Some(Region {
+                offset: 0,
+                bytes: 16,
+                blake3: String::new(),
+            });
+            part.global_scale = native.then_some(1.0);
+            loader.tensors.insert("expert.weight".into(), part.clone());
+            let quant_bytes = part.bytes as u64 + 16 + if native { 4 } else { 0 };
+            assert_eq!(loader.weight_bytes(DType::BF16)?, 2560 + quant_bytes);
+            assert_eq!(loader.weight_bytes(DType::F32)?, 3072 + quant_bytes);
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "requires a CUDA device"]
+    fn admission_queries_selected_cuda_context() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let available = available_device_memory(&device)?;
+        assert!(available > 0);
+        let Device::Cuda(cuda) = &device else {
+            unreachable!()
+        };
+        let (_, total) = cuda.cuda_stream().context().mem_get_info()?;
+        assert!(available <= total as u64);
+        let loader = WeightLoader::open(Path::new("tests/fixtures/tiny"))?;
+        loader.check_memory(DType::BF16, &device, 1024)?;
+        assert!(
+            loader
+                .check_memory(DType::BF16, &device, total as u64)
+                .is_err()
+        );
+        Ok(())
+    }
     pub(super) struct Directory(pub(super) PathBuf);
     impl Directory {
         pub(super) fn new() -> Self {
@@ -764,7 +836,7 @@ mod tests {
         candle_core::safetensors::save(&weights, dir.0.join("model.safetensors"))?;
         drop(weights);
         let loader = WeightLoader::open(&dir.0)?;
-        loader.check_memory(DType::F32)?;
+        loader.check_memory(DType::F32, &Device::Cpu, 0)?;
         let actual = loader
             .load("large", n.into(), DType::F32, &Device::Cpu)?
             .to_vec1::<f32>()?;

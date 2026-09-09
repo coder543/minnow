@@ -79,7 +79,7 @@ target/release/examples/bench_load models/llada2.2-mini-int8.mnw
 minnow --model models/llada2.2-mini-int8.mnw validate
 ```
 
-The benchmark uses 4 GiB of host load headroom, matching the measured deployment.
+The benchmark checks target-device capacity for weights and full K/V before loading.
 Run measurements separately from serving and compilation.
 The reader uses a dedicated Rayon pool for each batch; `RAYON_NUM_THREADS` controls CPU
 read concurrency independently of the bounded batch queue. A 16-chunk pipeline

@@ -712,19 +712,18 @@ impl Drop for Model {
     }
 }
 impl Model {
+    /// Load after checking target capacity for weights and one full context of K/V.
     pub fn load(path: &Path, dtype: DType, device: &Device) -> Result<Self> {
-        Self::load_with_memory_reserve(
-            path,
-            dtype,
-            device,
-            crate::weights::DEFAULT_MEMORY_RESERVE_MIB,
-        )
+        Self::load_with_cache_budget(path, dtype, device, None, None)
     }
-    pub fn load_with_memory_reserve(
+    /// Check capacity using the same context limit and shared budget as the server.
+    /// Both `None` defaults select one full model context; K/V is allocated on demand.
+    pub fn load_with_cache_budget(
         path: &Path,
         dtype: DType,
         device: &Device,
-        reserve_mib: u64,
+        max_context: Option<usize>,
+        cache_max_mib: Option<usize>,
     ) -> Result<Self> {
         ensure!(
             !device.is_cpu() || dtype == DType::F32,
@@ -732,7 +731,12 @@ impl Model {
         );
         let c = Config::load(path)?;
         let mut loader = crate::weights::WeightLoader::open(path)?;
-        loader.set_memory_reserve_mib(reserve_mib)?;
+        let (_, kv_bytes) = crate::prefix::cache_budget(
+            &c,
+            dtype,
+            max_context.unwrap_or(c.max_position_embeddings),
+            cache_max_mib,
+        )?;
         #[cfg(feature = "cuda")]
         if device.is_cuda()
             && loader
@@ -751,7 +755,7 @@ impl Model {
                     .any(|(_, _, encoding)| encoding.quantized()),
             "quantized CUDA execution requires BF16 activations; use --dtype bf16"
         );
-        loader.check_memory(dtype)?;
+        loader.check_memory(dtype, device, kv_bytes as u64)?;
         loader.start_allocations(dtype, device)?;
         let loader = Arc::new(loader);
         let vb = VarBuilder::from_backend(
@@ -863,6 +867,9 @@ impl Model {
             * self.config.num_key_value_heads
             * self.config.head_dim
             * self.dtype.size_in_bytes()
+    }
+    pub(crate) fn dtype(&self) -> DType {
+        self.dtype
     }
     pub fn set_batched_experts(&mut self, enabled: bool) {
         self.moe_execution.batched_experts = enabled;
