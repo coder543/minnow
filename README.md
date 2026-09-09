@@ -10,16 +10,40 @@ the client with prefill progress, useful token rates, and refinement statistics.
 
 ## Measured performance
 
+### DGX Spark (GB10)
+
+LLaDA2.2-mini, one request at a time, CUDA 13. Minnow uses block FlashAttention,
+BF16 dense layers, and a 512 MiB workspace cache; the upstream Transformers
+5.2.0 reference uses BF16 and SDPA. Rates are **tokens/second**:
+
+| Implementation / expert execution | 4,096-token prefill | LHC decode | React TypeScript decode |
+| --- | ---: | ---: | ---: |
+| Transformers BF16 / SDPA | 5,808 | 12.7 | 39.5 |
+| Minnow BF16 | 10,000 | 48.8 | 131.6 |
+| Minnow INT8 / BF16 activations | 9,552 | 73.1 | 232.5 |
+| Minnow INT4 / BF16 activations | 10,567 | 102.2 | 273.1 |
+| Minnow INT4 / INT8 activations | 12,919 | 105.6 | 272.0 |
+| Minnow NVFP4 / native FP4 tensor cores | 15,509 | 95.0 | 279.8 |
+
+These runs use identical [prompts](tests/decode_comparison_cases.json), greedy
+settings, and a 512-token output cap. Decode counts useful text tokens, includes
+all refinements, and averages three runs after a warmup. Prefill uses identical
+input tokens and excludes loading and the vocabulary head. Prefix reuse between
+requests is disabled; minnow still reuses committed K/V within each response.
+Responses and refinement counts differ across implementations and precisions;
+React reaches the output cap in every row. These are throughput measurements,
+not a claim of equal answer quality. See [Spark settings and samples](docs/spark-performance.md).
+
 ### RTX 3090 (24 GiB)
 
 LLaDA2.2-mini, one request at a time, CUDA 13, a 420 W GPU power limit, BF16 dense
 layers, FlashAttention, and a 512 MiB workspace cache. Rates below are **tokens/second**:
 
-| Expert execution | 4,096-token prefill | LHC decode | React TypeScript decode | Fellowship decode |
-| --- | ---: | ---: | ---: | ---: |
-| INT8 / BF16 activations | 13,094 | 210 | 667 | 151 |
-| INT4 / INT8 activations | 15,667 | 238 | 697 | 194 |
-| NVFP4 / BF16 tensor-core fallback | 11,578 | 133 | 300 | 108 |
+| Expert execution | 4,096-token prefill | LHC decode | React TypeScript decode |
+| --- | ---: | ---: | ---: |
+| INT8 / BF16 activations | 13,094 | 210 | 667 |
+| INT4 / INT8 activations | 15,667 | 238 | 697 |
+| NVFP4 / BF16 tensor-core fallback | 11,578 | 133 | 300 |
 
 Prefill averages ten samples and excludes loading and the vocabulary head.
 Decode averages four warmed runs of each [prompt](tests/decode_natural_cases.json),
@@ -54,21 +78,24 @@ Download [LLaDA2.2-mini](https://huggingface.co/inclusionAI/LLaDA2.2-mini) or
 configuration, tokenizer, and chat template. Pass the checkpoint location
 explicitly with `--model`; there is no assumed installation directory.
 
-Preconverted mini containers are available from
-[coder543/LLaDA2.2-mini-minnow](https://huggingface.co/coder543/LLaDA2.2-mini-minnow):
+Preconverted BF16, INT8, INT4, and NVFP4 containers are available for
+[mini](https://huggingface.co/coder543/LLaDA2.2-mini-minnow) and
+[flash](https://huggingface.co/coder543/LLaDA2.2-flash-minnow):
 
 ```sh
 hf download coder543/LLaDA2.2-mini-minnow \
-  llada2.2-mini-bf16.mnw llada2.2-mini-int8.mnw llada2.2-mini-nvfp4.mnw \
+  llada2.2-mini-int4.mnw \
   --local-dir models
 ```
 
 ```sh
 cargo build --release --features cuda
 
+# Generate a response in the terminal.
 target/release/minnow --model models/LLaDA2.2-mini \
   generate 'What is the LHC?' --max-tokens 1024
 
+# Start the OpenAI-compatible Chat Completions API server.
 target/release/minnow --model models/LLaDA2.2-mini serve --listen 127.0.0.1:8080
 ```
 

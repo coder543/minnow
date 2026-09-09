@@ -1,0 +1,734 @@
+{
+  "recorded_at_utc": "2026-09-09T01:57:47.310248+00:00",
+  "hardware": "NVIDIA DGX Spark, GB10 (SM121)",
+  "model": "LLaDA2.2-mini",
+  "runtime_commit": "c2496fcf936a8b72555bb692313d4258d9ba528f",
+  "binary_sha256": "4f8878cc58d48c958a0f7fb928837bdaf27ee61bb9552ecafd163ec9732cc976",
+  "torch": "2.10.0+cu130",
+  "transformers": "5.2.0",
+  "reference_source_sha256": "ab246877017cefd93821f7498a74ef0a6af9e4cfb8295d750491601a3f6e9a59",
+  "cases": [
+    {
+      "name": "lhc",
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is the LHC?"
+        }
+      ],
+      "max_tokens": 512
+    },
+    {
+      "name": "react_typescript",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Write a React TypeScript example."
+        }
+      ],
+      "max_tokens": 512
+    }
+  ],
+  "cases_sha256": "09e375ffdc8c4422e5eefc03d63989cbb49cdfcf67ac9675c761ece3b0dfaeeb",
+  "prefill_input_sha256": "fe1a1a9121c92213fae79aa643987950040d4ea58d52f0f747faee64376c0a2b",
+  "settings": {
+    "parallel": 1,
+    "cache_prompt": false,
+    "max_tokens": 512,
+    "temperature": 0,
+    "threshold": 0.5,
+    "editing_threshold": 0,
+    "max_post_steps": 16,
+    "seed": 42,
+    "prefill_chunk_tokens": 4096,
+    "attention_chunk_tokens": 1024,
+    "workspace_cache_mib": 512
+  },
+  "metrics": {
+    "prefill": "Fresh prompt-to-KV tokens/second, no loading, tokenization, vocabulary head or decode.",
+    "decode": "Returned non-special text tokens divided by decode seconds; includes every refinement. Both prompts are shorter than 32 tokens, so no committed-block prefill is required.",
+    "samples": "Three measured generations after one per-prompt warmup. Minnow prefill: three samples after one warmup. Reference prefill: five after two warmups."
+  },
+  "results": [
+    {
+      "name": "reference-bf16",
+      "label": "Transformers BF16 / SDPA",
+      "prefill": [
+        {
+          "prompt_tokens": 4096,
+          "iterations": 5,
+          "warmups": 2,
+          "seconds": [
+            0.7043927719932981,
+            0.7026245219749399,
+            0.7054026169935241,
+            0.7077203090302646,
+            0.7057593379868194
+          ],
+          "mean_seconds": 0.7051799115957692,
+          "tokens_per_second": 5808.446798677318,
+          "execution": "one full prompt forward; use_cache=True; no vocabulary projection"
+        }
+      ],
+      "decode": [
+        {
+          "name": "lhc",
+          "prompt_ids": [
+            157151,
+            3840,
+            157152,
+            2372,
+            341,
+            268,
+            89180,
+            30,
+            156900,
+            157151,
+            598,
+            10450,
+            157152
+          ],
+          "tokens_per_second": 12.684631415761288,
+          "runs": [
+            {
+              "text_tokens": 247,
+              "seconds": 19.457137980032712,
+              "generated_ids_sha256": "c3bf20674747dc4c3e8b78d1c4bd3de1c59064f618e01ab62c8f4fdcdf342777",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 247,
+              "seconds": 19.47829051100416,
+              "generated_ids_sha256": "c3bf20674747dc4c3e8b78d1c4bd3de1c59064f618e01ab62c8f4fdcdf342777",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 247,
+              "seconds": 19.481720238982234,
+              "generated_ids_sha256": "c3bf20674747dc4c3e8b78d1c4bd3de1c59064f618e01ab62c8f4fdcdf342777",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "react_typescript",
+          "prompt_ids": [
+            157151,
+            3840,
+            157152,
+            11823,
+            259,
+            28153,
+            6734,
+            6238,
+            2890,
+            13,
+            156900,
+            157151,
+            598,
+            10450,
+            157152
+          ],
+          "tokens_per_second": 39.45908214153294,
+          "runs": [
+            {
+              "text_tokens": 512,
+              "seconds": 12.950974676001351,
+              "generated_ids_sha256": "aeb65efe5b784da7457aa070dfd15a4ee059dd56367493d7f8656f6e5db7c4fd",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 12.980926215008367,
+              "generated_ids_sha256": "aeb65efe5b784da7457aa070dfd15a4ee059dd56367493d7f8656f6e5db7c4fd",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 12.99449872697005,
+              "generated_ids_sha256": "aeb65efe5b784da7457aa070dfd15a4ee059dd56367493d7f8656f6e5db7c4fd",
+              "matches_warmup": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bf16",
+      "label": "Minnow BF16",
+      "checkpoint": "llada2.2-mini-bf16.mnw",
+      "attention_backend": "flash",
+      "server_args": [],
+      "prefill": [
+        {
+          "tokens": 512,
+          "seconds": [
+            0.116940109,
+            0.115732102,
+            0.115194947
+          ],
+          "tokens_per_second": 4415.4786235957345
+        },
+        {
+          "tokens": 2048,
+          "seconds": [
+            0.234832973,
+            0.241713024,
+            0.23973751
+          ],
+          "tokens_per_second": 8577.609200765808
+        },
+        {
+          "tokens": 4096,
+          "seconds": [
+            0.41280658,
+            0.409394418,
+            0.406638627
+          ],
+          "tokens_per_second": 9999.677541322775
+        },
+        {
+          "tokens": 8192,
+          "seconds": [
+            0.845157049,
+            0.841717863,
+            0.847643718
+          ],
+          "tokens_per_second": 9696.515823203872
+        }
+      ],
+      "decode": [
+        {
+          "name": "lhc",
+          "tokens_per_second": 48.824499125209385,
+          "refinements_per_block": 16.90909090909091,
+          "runs": [
+            {
+              "text_tokens": 310,
+              "seconds": 6.350505997,
+              "finish_reason": "stop",
+              "refinement_steps": 186,
+              "blocks": 11,
+              "text_sha256": "4a66bc8549af3b20141a027a35ce591a101bfbe816469e16d30cfaf7d6b1f93d",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 310,
+              "seconds": 6.342972,
+              "finish_reason": "stop",
+              "refinement_steps": 186,
+              "blocks": 11,
+              "text_sha256": "4a66bc8549af3b20141a027a35ce591a101bfbe816469e16d30cfaf7d6b1f93d",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 310,
+              "seconds": 6.354336454,
+              "finish_reason": "stop",
+              "refinement_steps": 186,
+              "blocks": 11,
+              "text_sha256": "4a66bc8549af3b20141a027a35ce591a101bfbe816469e16d30cfaf7d6b1f93d",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "react_typescript",
+          "tokens_per_second": 131.6322556467703,
+          "refinements_per_block": 6.9411764705882355,
+          "runs": [
+            {
+              "text_tokens": 512,
+              "seconds": 3.885926226,
+              "finish_reason": "length",
+              "refinement_steps": 118,
+              "blocks": 17,
+              "text_sha256": "3ab10c09ec51db4797ebae8f80fb2005ec0280eadb0323b4235ed2aa2f984769",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 3.887337794,
+              "finish_reason": "length",
+              "refinement_steps": 118,
+              "blocks": 17,
+              "text_sha256": "3ab10c09ec51db4797ebae8f80fb2005ec0280eadb0323b4235ed2aa2f984769",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 3.895608419,
+              "finish_reason": "length",
+              "refinement_steps": 118,
+              "blocks": 17,
+              "text_sha256": "3ab10c09ec51db4797ebae8f80fb2005ec0280eadb0323b4235ed2aa2f984769",
+              "matches_warmup": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "int8",
+      "label": "Minnow INT8 / BF16 activations",
+      "checkpoint": "llada2.2-mini-int8.mnw",
+      "attention_backend": "flash",
+      "server_args": [],
+      "prefill": [
+        {
+          "tokens": 512,
+          "seconds": [
+            0.086472668,
+            0.083010314,
+            0.08211263
+          ],
+          "tokens_per_second": 6105.034932008273
+        },
+        {
+          "tokens": 2048,
+          "seconds": [
+            0.225456662,
+            0.225115316,
+            0.224429952
+          ],
+          "tokens_per_second": 9102.196196683468
+        },
+        {
+          "tokens": 4096,
+          "seconds": [
+            0.42953209300000006,
+            0.427512483,
+            0.429442908
+          ],
+          "tokens_per_second": 9551.58923256186
+        },
+        {
+          "tokens": 8192,
+          "seconds": [
+            0.890953244,
+            0.894325549,
+            0.896583417
+          ],
+          "tokens_per_second": 9163.781758944282
+        }
+      ],
+      "decode": [
+        {
+          "name": "lhc",
+          "tokens_per_second": 73.12671016938818,
+          "refinements_per_block": 17.0,
+          "runs": [
+            {
+              "text_tokens": 190,
+              "seconds": 2.625763482,
+              "finish_reason": "stop",
+              "refinement_steps": 119,
+              "blocks": 7,
+              "text_sha256": "2b2b672d4bfeb6f18c73ffa298d789939be8d132423b849a73a4be21b211ec18",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 190,
+              "seconds": 2.625625894,
+              "finish_reason": "stop",
+              "refinement_steps": 119,
+              "blocks": 7,
+              "text_sha256": "2b2b672d4bfeb6f18c73ffa298d789939be8d132423b849a73a4be21b211ec18",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 190,
+              "seconds": 2.543300125,
+              "finish_reason": "stop",
+              "refinement_steps": 119,
+              "blocks": 7,
+              "text_sha256": "2b2b672d4bfeb6f18c73ffa298d789939be8d132423b849a73a4be21b211ec18",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "react_typescript",
+          "tokens_per_second": 232.4878157370047,
+          "refinements_per_block": 6.0588235294117645,
+          "runs": [
+            {
+              "text_tokens": 512,
+              "seconds": 2.219979935,
+              "finish_reason": "length",
+              "refinement_steps": 103,
+              "blocks": 17,
+              "text_sha256": "949c903a1602719dc87162ff51639be22cf06cdeb37725f0e8c0c3b9bcdf6a09",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 2.1623874610000002,
+              "finish_reason": "length",
+              "refinement_steps": 103,
+              "blocks": 17,
+              "text_sha256": "949c903a1602719dc87162ff51639be22cf06cdeb37725f0e8c0c3b9bcdf6a09",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 2.224430449,
+              "finish_reason": "length",
+              "refinement_steps": 103,
+              "blocks": 17,
+              "text_sha256": "949c903a1602719dc87162ff51639be22cf06cdeb37725f0e8c0c3b9bcdf6a09",
+              "matches_warmup": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "int4",
+      "label": "Minnow INT4 / BF16 activations",
+      "checkpoint": "llada2.2-mini-int4.mnw",
+      "attention_backend": "flash",
+      "server_args": [],
+      "prefill": [
+        {
+          "tokens": 512,
+          "seconds": [
+            0.066592917,
+            0.062021262,
+            0.06524315
+          ],
+          "tokens_per_second": 7923.352745667924
+        },
+        {
+          "tokens": 2048,
+          "seconds": [
+            0.196340845,
+            0.199268988,
+            0.200618323
+          ],
+          "tokens_per_second": 10304.78003792897
+        },
+        {
+          "tokens": 4096,
+          "seconds": [
+            0.386963549,
+            0.387784128,
+            0.388089634
+          ],
+          "tokens_per_second": 10567.256385532335
+        },
+        {
+          "tokens": 8192,
+          "seconds": [
+            0.81032005,
+            0.81044429,
+            0.808874842
+          ],
+          "tokens_per_second": 10115.082182602042
+        }
+      ],
+      "decode": [
+        {
+          "name": "lhc",
+          "tokens_per_second": 102.23775861380497,
+          "refinements_per_block": 16.142857142857142,
+          "runs": [
+            {
+              "text_tokens": 191,
+              "seconds": 1.986435583,
+              "finish_reason": "stop",
+              "refinement_steps": 113,
+              "blocks": 7,
+              "text_sha256": "2e1269c59f322b9cc4f9b806e70eaae7d3220833d178d978d8661e475beb922e",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 191,
+              "seconds": 1.807481578,
+              "finish_reason": "stop",
+              "refinement_steps": 113,
+              "blocks": 7,
+              "text_sha256": "2e1269c59f322b9cc4f9b806e70eaae7d3220833d178d978d8661e475beb922e",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 191,
+              "seconds": 1.8106658009999999,
+              "finish_reason": "stop",
+              "refinement_steps": 113,
+              "blocks": 7,
+              "text_sha256": "2e1269c59f322b9cc4f9b806e70eaae7d3220833d178d978d8661e475beb922e",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "react_typescript",
+          "tokens_per_second": 273.12473356768925,
+          "refinements_per_block": 6.882352941176471,
+          "runs": [
+            {
+              "text_tokens": 512,
+              "seconds": 1.8253205609999998,
+              "finish_reason": "length",
+              "refinement_steps": 117,
+              "blocks": 17,
+              "text_sha256": "50243b21979c04e94cbcc6a93faacabe202a43dcea3e96c923cc970962787d45",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 1.8984091889999999,
+              "finish_reason": "length",
+              "refinement_steps": 117,
+              "blocks": 17,
+              "text_sha256": "50243b21979c04e94cbcc6a93faacabe202a43dcea3e96c923cc970962787d45",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 1.9000743629999999,
+              "finish_reason": "length",
+              "refinement_steps": 117,
+              "blocks": 17,
+              "text_sha256": "50243b21979c04e94cbcc6a93faacabe202a43dcea3e96c923cc970962787d45",
+              "matches_warmup": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "int4-a8",
+      "label": "Minnow INT4 / INT8 activations",
+      "checkpoint": "llada2.2-mini-int4.mnw",
+      "attention_backend": "flash",
+      "server_args": [
+        "--int8-expert-activations"
+      ],
+      "prefill": [
+        {
+          "tokens": 512,
+          "seconds": [
+            0.053160015,
+            0.051891513,
+            0.051427879
+          ],
+          "tokens_per_second": 9815.988119126754
+        },
+        {
+          "tokens": 2048,
+          "seconds": [
+            0.15817752700000004,
+            0.158562985,
+            0.158492472
+          ],
+          "tokens_per_second": 12928.395559345267
+        },
+        {
+          "tokens": 4096,
+          "seconds": [
+            0.31860345,
+            0.315921084,
+            0.316638816
+          ],
+          "tokens_per_second": 12918.916608803313
+        },
+        {
+          "tokens": 8192,
+          "seconds": [
+            0.667718352,
+            0.667177404,
+            0.672016293
+          ],
+          "tokens_per_second": 12245.67863461963
+        }
+      ],
+      "decode": [
+        {
+          "name": "lhc",
+          "tokens_per_second": 105.6086401812651,
+          "refinements_per_block": 15.0,
+          "runs": [
+            {
+              "text_tokens": 182,
+              "seconds": 1.827663274,
+              "finish_reason": "stop",
+              "refinement_steps": 105,
+              "blocks": 7,
+              "text_sha256": "8d650d61b8c3942556c078e689845f241f26bf9a04d3870982d737e0520e9937",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 182,
+              "seconds": 1.674057897,
+              "finish_reason": "stop",
+              "refinement_steps": 105,
+              "blocks": 7,
+              "text_sha256": "8d650d61b8c3942556c078e689845f241f26bf9a04d3870982d737e0520e9937",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 182,
+              "seconds": 1.668310363,
+              "finish_reason": "stop",
+              "refinement_steps": 105,
+              "blocks": 7,
+              "text_sha256": "8d650d61b8c3942556c078e689845f241f26bf9a04d3870982d737e0520e9937",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "react_typescript",
+          "tokens_per_second": 272.0453295218597,
+          "refinements_per_block": 7.0588235294117645,
+          "runs": [
+            {
+              "text_tokens": 512,
+              "seconds": 1.895124701,
+              "finish_reason": "length",
+              "refinement_steps": 120,
+              "blocks": 17,
+              "text_sha256": "34bb46f19096e02114d461168dc2f040528912d118f43cbcc4d5917edc50ee6c",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 1.878700296,
+              "finish_reason": "length",
+              "refinement_steps": 120,
+              "blocks": 17,
+              "text_sha256": "34bb46f19096e02114d461168dc2f040528912d118f43cbcc4d5917edc50ee6c",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 1.8722928859999999,
+              "finish_reason": "length",
+              "refinement_steps": 120,
+              "blocks": 17,
+              "text_sha256": "34bb46f19096e02114d461168dc2f040528912d118f43cbcc4d5917edc50ee6c",
+              "matches_warmup": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nvfp4",
+      "label": "Minnow NVFP4 / native FP4 tensor cores",
+      "checkpoint": "llada2.2-mini-nvfp4.mnw",
+      "attention_backend": "flash",
+      "server_args": [],
+      "prefill": [
+        {
+          "tokens": 512,
+          "seconds": [
+            0.063452595,
+            0.049970558,
+            0.050110783
+          ],
+          "tokens_per_second": 9392.54589946395
+        },
+        {
+          "tokens": 2048,
+          "seconds": [
+            0.136199174,
+            0.132204545,
+            0.132325026
+          ],
+          "tokens_per_second": 15332.067081935937
+        },
+        {
+          "tokens": 4096,
+          "seconds": [
+            0.266321693,
+            0.262976572,
+            0.263018556
+          ],
+          "tokens_per_second": 15508.947524919453
+        },
+        {
+          "tokens": 8192,
+          "seconds": [
+            0.555733822,
+            0.555239259,
+            0.559020942
+          ],
+          "tokens_per_second": 14716.220334640084
+        }
+      ],
+      "decode": [
+        {
+          "name": "lhc",
+          "tokens_per_second": 94.97856520427266,
+          "refinements_per_block": 17.375,
+          "runs": [
+            {
+              "text_tokens": 215,
+              "seconds": 2.266936018,
+              "finish_reason": "stop",
+              "refinement_steps": 139,
+              "blocks": 8,
+              "text_sha256": "2ff21440ae3fd7d6ba7b762102505a93d9461b516b5f05c54516f2849949f9d1",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 215,
+              "seconds": 2.2640144019999995,
+              "finish_reason": "stop",
+              "refinement_steps": 139,
+              "blocks": 8,
+              "text_sha256": "2ff21440ae3fd7d6ba7b762102505a93d9461b516b5f05c54516f2849949f9d1",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 215,
+              "seconds": 2.260055515,
+              "finish_reason": "stop",
+              "refinement_steps": 139,
+              "blocks": 8,
+              "text_sha256": "2ff21440ae3fd7d6ba7b762102505a93d9461b516b5f05c54516f2849949f9d1",
+              "matches_warmup": true
+            }
+          ]
+        },
+        {
+          "name": "react_typescript",
+          "tokens_per_second": 279.7637913656324,
+          "refinements_per_block": 6.647058823529412,
+          "runs": [
+            {
+              "text_tokens": 512,
+              "seconds": 1.8295637379999998,
+              "finish_reason": "length",
+              "refinement_steps": 113,
+              "blocks": 17,
+              "text_sha256": "61e92dbd51922fde93814d1f0fd5083ecc1d0489024fc32a3264901d9b41af4e",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 1.8303228440000001,
+              "finish_reason": "length",
+              "refinement_steps": 113,
+              "blocks": 17,
+              "text_sha256": "61e92dbd51922fde93814d1f0fd5083ecc1d0489024fc32a3264901d9b41af4e",
+              "matches_warmup": true
+            },
+            {
+              "text_tokens": 512,
+              "seconds": 1.8304593719999998,
+              "finish_reason": "length",
+              "refinement_steps": 113,
+              "blocks": 17,
+              "text_sha256": "61e92dbd51922fde93814d1f0fd5083ecc1d0489024fc32a3264901d9b41af4e",
+              "matches_warmup": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

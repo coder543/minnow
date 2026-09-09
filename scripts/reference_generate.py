@@ -31,12 +31,16 @@ def main():
     p.add_argument('--prefill-lengths', type=int, nargs='+', default=[512, 2048, 4096])
     p.add_argument('--prefill-iterations', type=int, default=5)
     p.add_argument('--prefill-only', action='store_true')
+    p.add_argument('--generation-iterations', type=int, default=1)
+    p.add_argument('--generation-warmups', type=int, default=0)
     p.add_argument('--attention', choices=['eager', 'sdpa'], default='eager')
     args = p.parse_args()
     if args.prefill_only and not args.prefill_input:
         p.error('--prefill-only requires --prefill-input')
     if not 1 <= args.prefill_iterations <= 100:
         p.error('--prefill-iterations must be 1–100')
+    if not 1 <= args.generation_iterations <= 20 or not 0 <= args.generation_warmups <= 5:
+        p.error('generation requires 1–20 iterations and 0–5 warmups')
     torch.set_num_threads(4)
     torch.backends.cuda.matmul.allow_tf32 = False
     reader = WeightReader(args.model)
@@ -115,20 +119,33 @@ def main():
             for case in cases:
                 prompt = tokenizer.apply_chat_template(case['messages'], tokenize=False, add_generation_prompt=True)
                 ids = tokenizer.encode(prompt, add_special_tokens=False)
-                if len(ids) + case['max_tokens'] > 512:
-                    raise ValueError('reference generation is limited to 512 total tokens')
+                if len(ids) + case['max_tokens'] > 1024:
+                    raise ValueError('reference generation is limited to 1024 total tokens')
                 inputs = torch.tensor([ids], device='cuda')
-                torch.manual_seed(42)
-                torch.cuda.synchronize()
-                started = time.perf_counter()
-                output = model.generate(inputs, gen_length=case['max_tokens'], eos_early_stop=True)
-                torch.cuda.synchronize()
-                seconds = time.perf_counter() - started
-                generated = output[0].tolist()
+                runs, warm_ids = [], None
+                special_ids = set(tokenizer.all_special_ids)
+                for iteration in range(args.generation_warmups + args.generation_iterations):
+                    torch.manual_seed(42)
+                    torch.cuda.synchronize()
+                    started = time.perf_counter()
+                    output = model.generate(inputs, gen_length=case['max_tokens'], eos_early_stop=True)
+                    torch.cuda.synchronize()
+                    seconds = time.perf_counter() - started
+                    generated = output[0].tolist()
+                    text_tokens = sum(token not in special_ids for token in generated)
+                    if warm_ids is None:
+                        warm_ids = generated
+                    if iteration >= args.generation_warmups:
+                        runs.append({'generated_ids': generated, 'elapsed_seconds': seconds,
+                            'text_tokens': text_tokens, 'matches_warmup': generated == warm_ids})
+                    print(f'{case["name"]} iteration {iteration}: {text_tokens} text tokens in {seconds:.3f}s',
+                          file=sys.stderr, flush=True)
+                seconds = sum(r['elapsed_seconds'] for r in runs) / len(runs)
                 results.append({'name': case['name'], 'prompt_ids': ids, 'generated_ids': generated,
                     'text': tokenizer.decode(generated, skip_special_tokens=True), 'elapsed_seconds': seconds,
-                    'tokens_per_second': len(generated) / seconds})
-                print(f'{case["name"]}: {len(generated)} tokens in {seconds:.3f}s', file=sys.stderr, flush=True)
+                    'tokens_per_second': sum(len(r['generated_ids']) for r in runs) / sum(r['elapsed_seconds'] for r in runs),
+                    'text_tokens_per_second': sum(r['text_tokens'] for r in runs) / sum(r['elapsed_seconds'] for r in runs),
+                    'iterations': args.generation_iterations, 'warmups': args.generation_warmups, 'runs': runs})
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps({'dtype': 'bfloat16', 'attention': model.config._attn_implementation,
             'prefill_input_sha256': hashlib.sha256(args.prefill_input.read_bytes()).hexdigest() if args.prefill_input else None,

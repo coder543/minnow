@@ -1,0 +1,22 @@
+[
+  {
+    "name": "lhc",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is the LHC?"
+      }
+    ],
+    "max_tokens": 512
+  },
+  {
+    "name": "react_typescript",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a React TypeScript example."
+      }
+    ],
+    "max_tokens": 512
+  }
+]

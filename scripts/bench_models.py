@@ -19,6 +19,7 @@ def main():
     p.add_argument('--model', type=Path, required=True)
     p.add_argument('--report', type=Path, required=True)
     p.add_argument('--iterations', type=int, default=3)
+    p.add_argument('--cases', type=Path, help='JSON chat cases; --max-tokens sets the common output cap')
     p.add_argument('--max-tokens', type=int, default=2048)
     p.add_argument('--workspace-cache-mib', type=int, default=2048)
     p.add_argument('--prefill-only', action='store_true')
@@ -79,14 +80,19 @@ def main():
                     print(json.dumps({'prefill': item}), flush=True)
                     save()
             if not args.prefill_only:
-                for name, prompt in [
-                    ('lhc', 'What is the LHC?'),
-                    ('react', 'Write a React TypeScript example'),
-                    ('fellowship', 'List the main characters of the Fellowship of the Ring with a short back story for each.')]:
+                cases = json.loads(args.cases.read_text()) if args.cases else [
+                    {'name': name, 'messages': [{'role': 'user', 'content': prompt}]}
+                    for name, prompt in [
+                        ('lhc', 'What is the LHC?'),
+                        ('react', 'Write a React TypeScript example'),
+                        ('fellowship', 'List the main characters of the Fellowship of the Ring with a short back story for each.')]]
+                for case in cases:
+                    name, messages = case['name'], case['messages']
+                    prompt = '\n'.join(m['content'] for m in messages)
                     runs, warm_text = [], None
                     for iteration in range(args.iterations+1):
                         start = time.monotonic()
-                        out = request('/v1/chat/completions', {'messages': [{'role': 'user', 'content': prompt}],
+                        out = request('/v1/chat/completions', {'messages': messages,
                             'max_tokens': args.max_tokens, 'cache_prompt': False})
                         text = out['choices'][0]['message']['content']
                         print(json.dumps({'case':name,'iteration':iteration,
