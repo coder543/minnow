@@ -95,6 +95,75 @@ fn original_container_is_self_contained_and_preserves_model_execution() -> Resul
 }
 
 #[test]
+fn bf16_container_can_quantize_to_int4_without_source_safetensors() -> Result<()> {
+    use minnow::container::Encoding;
+    let fixture = Fixture::new()?;
+    let source = fixture.0.join("source");
+    let weights = candle_core::safetensors::load(source.join("model.safetensors"), &Device::Cpu)?;
+    let weights = weights
+        .into_iter()
+        .map(|(name, weight)| Ok((name, weight.to_dtype(DType::BF16)?)))
+        .collect::<candle_core::Result<std::collections::HashMap<_, _>>>()?;
+    candle_core::safetensors::save(&weights, source.join("model.safetensors"))?;
+    drop(weights);
+    let bf16 = fixture.0.join("source-bf16.mnw");
+    convert(&source, &bf16, &Conversion::default())?;
+    let options = Conversion {
+        expert_encoding: Some(Encoding::I4Mma),
+        group_size: 16,
+        rules: vec![],
+    };
+    let direct = fixture.0.join("direct-int4.mnw");
+    let expected = convert(&source, &direct, &options)?;
+    std::fs::remove_dir_all(source)?;
+    let output = fixture.0.join("container-int4.mnw");
+    let actual = convert(&bf16, &output, &options)?;
+    assert_eq!(actual.manifest.assets, expected.manifest.assets);
+    for (name, tensor) in &actual.manifest.tensors {
+        let expected = &expected.manifest.tensors[name];
+        assert_eq!(tensor.encoding, expected.encoding);
+        assert_eq!(tensor.data.blake3, expected.data.blake3);
+        assert_eq!(
+            tensor.scales.as_ref().map(|s| &s.blake3),
+            expected.scales.as_ref().map(|s| &s.blake3)
+        );
+        if name.contains(".experts.") {
+            assert_eq!(tensor.encoding, Encoding::I4Mma);
+            assert_eq!(tensor.data.bytes as usize, tensor.elements()? / 2);
+        } else {
+            assert_eq!(tensor.encoding, Encoding::Bf16);
+        }
+    }
+    Container::validate(&bf16)?;
+    Container::validate(&output)?;
+    let evaluate = |path: &Path| -> Result<Vec<f32>> {
+        let model = Model::load(path, DType::F32, &Device::Cpu)?;
+        let mut cache = Cache::new(&model.config, 32)?;
+        Ok(model
+            .forward(&[1; 32], &mut cache, true, None)?
+            .unwrap()
+            .flatten_all()?
+            .to_vec1::<f32>()?)
+    };
+    assert_eq!(evaluate(&direct)?, evaluate(&output)?);
+    // Reject lossy re-quantization before creating an output file.
+    let rejected = fixture.0.join("invalid-int8.mnw");
+    assert!(
+        convert(
+            &output,
+            &rejected,
+            &Conversion {
+                expert_encoding: Some(Encoding::I8Mma),
+                ..options
+            }
+        )
+        .is_err()
+    );
+    assert!(!rejected.exists());
+    Ok(())
+}
+
+#[test]
 fn corrupt_payload_and_manifest_are_rejected() -> Result<()> {
     let fixture = Fixture::new()?;
     let source = fixture.0.join("source");

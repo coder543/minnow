@@ -139,14 +139,14 @@ before loading weights and defaults to FP32. Quantized expert codes and scales
 remain packed. The CPU borrows that storage, decodes directly into one selected
 expert's FP32 GEMM buffer in parallel, and drops it before evaluating the next
 expert. It does not copy packed experts or unpack their layouts into temporary
-code/scale arrays. INT8 retains BF16 operand rounding; NVFP4 retains activation
+code/scale arrays. INT4/INT8 retain BF16 operand rounding; NVFP4 retains activation
 quantization in its scalar reference implementation. A persistent Candle worker
 pool spans each model forward.
 
 Unquantized weights, activations, and K/V use FP32 on CPU. Budget twice the BF16
 size of the unquantized weights, plus expert scratch and runtime memory. CPU
 execution is a functional fallback, not a substitute for GPU throughput.
-Independent row-major oracle tests cover both INT8 layouts and NVFP4 at every
+Independent row-major oracle tests cover both INT4/INT8 layouts and NVFP4 at every
 mini/flash projection width, repeated experts, and nonzero storage offsets.
 
 Candle has an Apple Metal backend, but minnow does not enable or integrate it.

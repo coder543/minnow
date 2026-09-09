@@ -1,5 +1,6 @@
-//! Native block-scaled FP4 MMA on SM120/121. Activations are quantized once per
-//! projection input, and the gate/up pair shares that temporary allocation.
+//! Native block-scaled FP4 MMA on SM120/121, with a BF16 MMA fallback on SM80+.
+//! Activations are quantized once per projection input; both paths keep weights
+//! packed and share that temporary activation allocation across gate/up.
 use crate::{container::Encoding, quant::Weights};
 use candle_core::cuda_backend::{
     WrapErr,
@@ -11,14 +12,54 @@ use candle_core::{
 };
 use half::bf16;
 const PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/minnow-nvfp4.ptx"));
+const BF16_PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/minnow-nvfp4-bf16.ptx"));
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Backend {
+    Native,
+    Bf16,
+}
+impl Backend {
+    fn for_capability(capability: (i32, i32)) -> Result<Self> {
+        if capability.0 == 12 && [0, 1].contains(&capability.1) {
+            Ok(Self::Native)
+        } else if capability.0 >= 8 {
+            Ok(Self::Bf16)
+        } else {
+            candle_core::bail!("NVFP4 CUDA execution requires SM80 or newer")
+        }
+    }
+    fn module(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Native => ("minnow-nvfp4-v1", PTX),
+            Self::Bf16 => ("minnow-nvfp4-bf16-v1", BF16_PTX),
+        }
+    }
+}
+fn activation_bytes(native: bool, rows: usize, input: usize) -> usize {
+    let operands = if native {
+        rows * input * 9 / 16
+    } else {
+        rows * input * 2
+    };
+    operands + rows * 4
+}
+fn backend(device: &candle_core::CudaDevice) -> Result<Backend> {
+    Backend::for_capability(device.cuda_stream().context().compute_capability().w()?)
+}
+fn default_tile(capability: (i32, i32), input: usize, rows: usize, segments: usize) -> usize {
+    if capability == (8, 6) && rows > 256 {
+        32
+    } else if input >= 2048 || rows / segments.max(1) <= 16 {
+        16
+    } else {
+        32
+    }
+}
 pub fn check_device(device: &Device) -> Result<()> {
     let Device::Cuda(device) = device else {
-        candle_core::bail!("native NVFP4 requires CUDA");
+        candle_core::bail!("NVFP4 CUDA execution requires CUDA");
     };
-    let capability = device.cuda_stream().context().compute_capability().w()?;
-    if capability.0 != 12 || ![0, 1].contains(&capability.1) {
-        candle_core::bail!("native NVFP4 kernels require SM120/121 (RTX Blackwell or GB10)");
-    }
+    backend(device)?;
     Ok(())
 }
 struct Quantize;
@@ -42,18 +83,20 @@ impl CustomOp1 for Quantize {
             candle_core::bail!("invalid NVFP4 activation shape/layout");
         }
         let dev = &x.device;
+        let backend = backend(dev)?;
+        let (module, ptx) = backend.module();
         let xs = x
             .as_cuda_slice::<bf16>()?
             .slice(l.start_offset()..l.start_offset() + rows * input);
-        let bytes = rows * input * 9 / 16 + rows * 4;
-        // SAFETY: the kernel writes every code, scale and FP32 outer scale.
+        let bytes = activation_bytes(backend == Backend::Native, rows, input);
+        // SAFETY: the kernel writes all quantized operands and FP32 outer scales.
         let mut output = unsafe { dev.alloc::<u8>(bytes)? };
         let name = if [512, 1024, 2048, 4096].contains(&input) {
             format!("minnow_nvfp4_quantize_{input}")
         } else {
             "minnow_nvfp4_quantize".into()
         };
-        let f = dev.get_or_load_custom_func(&name, "minnow-nvfp4-v1", PTX)?;
+        let f = dev.get_or_load_custom_func(&name, module, ptx)?;
         let (k, m) = (input as i32, rows as i32);
         let mut call = f.builder();
         call.arg(&xs).arg(&mut output).arg(&k).arg(&m);
@@ -109,6 +152,8 @@ impl CustomOp3 for Gemm<'_> {
         let (experts, out, input) = self.w.shape;
         let rows = self.rows;
         let source_rows = self.source_rows;
+        let backend = backend(&x.device)?;
+        let (module, ptx) = backend.module();
         if self.w.encoding != Encoding::Nvfp4
             || self.w.group_size != 16
             || experts == 0
@@ -129,7 +174,8 @@ impl CustomOp3 for Gemm<'_> {
             || ![xl, wl, sl]
                 .iter()
                 .all(|l| l.is_contiguous() && l.start_offset().is_multiple_of(4))
-            || xl.shape().elem_count() != source_rows * input * 9 / 16 + source_rows * 4
+            || xl.shape().elem_count()
+                != activation_bytes(backend == Backend::Native, source_rows, input)
             || wl.shape().elem_count() != experts * out * input / 2
             || sl.shape().elem_count() != experts * out * input / 16
             || self.segments.iter().any(|&(e, n)| e >= experts || n == 0)
@@ -259,8 +305,8 @@ impl CustomOp3 for Gemm<'_> {
                 if self.pair.is_some() { "pair" } else { "gemm" },
                 self.tile
             ),
-            "minnow-nvfp4-v1",
-            PTX,
+            module,
+            ptx,
         )?;
         let (k, n, m) = (input as i32, out as i32, source_rows as i32);
         let indexed =
@@ -321,15 +367,15 @@ fn run(
             }
         }
     }
+    let Device::Cuda(device) = a.device() else {
+        candle_core::bail!("NVFP4 CUDA execution requires CUDA");
+    };
+    let capability = device.cuda_stream().context().compute_capability().w()?;
     let tile = std::env::var("MINNOW_NVFP4_TILE_ROWS")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .filter(|v| [16, 32, 64, 128].contains(v))
-        .unwrap_or(if w.shape.2 >= 2048 || rows / segments.len().max(1) <= 16 {
-            16
-        } else {
-            32
-        });
+        .unwrap_or_else(|| default_tile(capability, w.shape.2, rows, segments.len()));
     a.apply_op3_no_bwd(
         &w.codes,
         &w.scales,
@@ -458,7 +504,24 @@ mod tests {
     use super::*;
     use crate::quant::nvfp4 as reference;
     #[test]
-    #[ignore = "requires SM120/121"]
+    fn ampere_dispatch_preserves_blackwell_defaults() -> Result<()> {
+        assert!(Backend::for_capability((7, 5)).is_err());
+        for capability in [(8, 0), (8, 6), (8, 9), (9, 0)] {
+            assert_eq!(Backend::for_capability(capability)?, Backend::Bf16);
+        }
+        for capability in [(12, 0), (12, 1)] {
+            assert_eq!(Backend::for_capability(capability)?, Backend::Native);
+            assert_eq!(default_tile(capability, 2048, 32768, 256), 16);
+            assert_eq!(default_tile(capability, 512, 32768, 256), 32);
+        }
+        assert_eq!(default_tile((8, 6), 2048, 32768, 256), 32);
+        assert_eq!(default_tile((8, 6), 2048, 256, 48), 16);
+        assert_eq!(activation_bytes(true, 32, 2048), 36992);
+        assert_eq!(activation_bytes(false, 32, 2048), 131200);
+        Ok(())
+    }
+    #[test]
+    #[ignore = "requires SM80+ CUDA"]
     fn compact_device_route_matches_host_projections_and_mix() -> anyhow::Result<()> {
         let dev = Device::new_cuda(0)?;
         let make_weights = |out, input, salt| -> anyhow::Result<Weights> {
@@ -476,6 +539,7 @@ mod tests {
                 globals.push(g);
             }
             Ok(Weights {
+                int8_activations: false,
                 codes: Tensor::from_vec(codes, 256 * out * input / 2, &dev)?,
                 scales: Tensor::from_vec(scales, 256 * out * input / 16, &dev)?,
                 global_scales: Some(Tensor::from_vec(globals, 256, &dev)?),
@@ -567,15 +631,19 @@ mod tests {
         Ok(())
     }
     #[test]
-    #[ignore = "requires SM120/121"]
-    fn native_mma_matches_independent_nvfp4_operands() -> anyhow::Result<()> {
+    #[ignore = "requires SM80+ CUDA"]
+    fn mma_matches_independent_nvfp4_operands() -> anyhow::Result<()> {
         let dev = Device::new_cuda(0)?;
         check_device(&dev)?;
+        let Device::Cuda(cuda) = &dev else {
+            unreachable!()
+        };
+        let native = backend(cuda)? == Backend::Native;
         for input in [192, 512, 1024, 2048, 4096] {
             let (experts, out, rows) = (3, 80, 299);
-            let mut codes = Vec::new();
-            let mut scales = Vec::new();
-            let mut globals = Vec::new();
+            let mut codes = vec![0; 4];
+            let mut scales = vec![0; 4];
+            let mut globals = vec![1.];
             let mut weights = Vec::new();
             for e in 0..experts {
                 let v: Vec<_> = (0..out * input)
@@ -588,14 +656,23 @@ mod tests {
                 scales.extend(s);
                 globals.push(g);
             }
-            let w = Weights {
-                codes: Tensor::from_vec(codes, experts * out * input / 2, &dev)?,
-                scales: Tensor::from_vec(scales, experts * out * input / 16, &dev)?,
-                global_scales: Some(Tensor::from_vec(globals, experts, &dev)?),
-                encoding: Encoding::Nvfp4,
-                group_size: 16,
-                shape: (experts, out, input),
-            };
+            let w =
+                Weights {
+                    int8_activations: false,
+                    codes: Tensor::from_vec(codes, experts * out * input / 2 + 4, &dev)?.narrow(
+                        0,
+                        4,
+                        experts * out * input / 2,
+                    )?,
+                    scales: Tensor::from_vec(scales, experts * out * input / 16 + 4, &dev)?
+                        .narrow(0, 4, experts * out * input / 16)?,
+                    global_scales: Some(
+                        Tensor::from_vec(globals, experts + 1, &dev)?.narrow(0, 1, experts)?,
+                    ),
+                    encoding: Encoding::Nvfp4,
+                    group_size: 16,
+                    shape: (experts, out, input),
+                };
             let x = Tensor::from_vec(
                 (0..rows * input)
                     .map(|i| {
@@ -617,18 +694,27 @@ mod tests {
             let mut decoded = Vec::new();
             for (row, values) in original.iter().enumerate() {
                 let (c, s, g) = reference::encode(values)?;
-                assert_eq!(
-                    &actual[row * input / 2..(row + 1) * input / 2],
-                    &c,
-                    "activation codes row {row}"
-                );
-                assert_eq!(
-                    &actual[rows * input / 2 + row * input / 16
-                        ..rows * input / 2 + (row + 1) * input / 16],
-                    &s,
-                    "activation scales row {row}"
-                );
-                let offset = rows * input * 9 / 16 + row * 4;
+                if native {
+                    assert_eq!(
+                        &actual[row * input / 2..(row + 1) * input / 2],
+                        &c,
+                        "activation codes row {row}"
+                    );
+                    assert_eq!(
+                        &actual[rows * input / 2 + row * input / 16
+                            ..rows * input / 2 + (row + 1) * input / 16],
+                        &s,
+                        "activation scales row {row}"
+                    );
+                } else {
+                    let operands = reference::decode(&c, &s, 1.)?;
+                    for (k, &v) in operands.iter().enumerate() {
+                        let offset = (row * input + k) * 2;
+                        let bits = u16::from_le_bytes(actual[offset..offset + 2].try_into()?);
+                        assert_eq!(bits, bf16::from_f32(v).to_bits(), "row{row} col{k}");
+                    }
+                }
+                let offset = activation_bytes(native, rows, input) - rows * 4 + row * 4;
                 assert_eq!(&actual[offset..offset + 4], &g.to_le_bytes());
                 decoded.extend(reference::decode(&c, &s, g)?);
             }

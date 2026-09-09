@@ -27,22 +27,36 @@ pub enum Encoding {
     I8Sym,
     /// INT8 in m16n8k16 tensor-core fragment order, with tiled FP16 scales.
     I8Mma,
+    /// Signed symmetric INT4, low nibble first, FP16 group scales.
+    I4Sym,
+    /// INT4 in the same N8/K16 fragment order as I8Mma, two codes per byte.
+    I4Mma,
     /// Native NVFP4: E2M1, E4M3 scales per 16, FP32 scale per expert matrix.
     Nvfp4,
 }
 impl Encoding {
     pub fn quantized(self) -> bool {
-        matches!(self, Self::I8Sym | Self::I8Mma | Self::Nvfp4)
+        self.integer() || self == Self::Nvfp4
     }
     pub fn int8(self) -> bool {
         matches!(self, Self::I8Sym | Self::I8Mma)
     }
+    pub fn int4(self) -> bool {
+        matches!(self, Self::I4Sym | Self::I4Mma)
+    }
+    pub fn integer(self) -> bool {
+        self.int8() || self.int4()
+    }
+    pub fn code_bits(self) -> usize {
+        if self.int8() { 8 } else { 4 }
+    }
     pub fn packed(self) -> bool {
-        matches!(self, Self::I8Mma)
+        matches!(self, Self::I8Mma | Self::I4Mma)
     }
     pub fn row_major(self) -> Self {
         match self {
             Self::I8Mma => Self::I8Sym,
+            Self::I4Mma => Self::I4Sym,
             other => other,
         }
     }
@@ -99,7 +113,7 @@ impl TensorInfo {
             Encoding::Bf16 | Encoding::F16 => n.checked_mul(2),
             Encoding::F32 => n.checked_mul(4),
             Encoding::I8Sym | Encoding::I8Mma => Some(n),
-            Encoding::Nvfp4 => Some(n.div_ceil(2)),
+            Encoding::I4Sym | Encoding::I4Mma | Encoding::Nvfp4 => Some(n.div_ceil(2)),
         }
         .context("tensor byte size overflow")?;
         ensure!(

@@ -1,4 +1,4 @@
-//! Expert quantization: INT8 weight-only and native NVFP4 weight/activation formats.
+//! Expert quantization: grouped INT4/INT8 and native NVFP4 formats.
 use crate::container::Encoding;
 use anyhow::{Context, Result, bail, ensure};
 use candle_core::{DType, Tensor};
@@ -6,6 +6,8 @@ use half::{bf16, f16};
 pub mod nvfp4;
 
 pub struct Weights {
+    /// Opt-in per-instance W4A8/W8A8 execution; checkpoints store weights only.
+    pub int8_activations: bool,
     pub codes: Tensor,
     pub scales: Tensor,
     pub encoding: Encoding,
@@ -15,6 +17,10 @@ pub struct Weights {
 }
 impl Weights {
     pub fn grouped(&self, x: &Tensor, segments: &[(usize, usize)]) -> Result<Tensor> {
+        ensure!(
+            !self.int8_activations || self.encoding.integer(),
+            "INT8 activations require integer expert weights"
+        );
         #[cfg(feature = "cuda")]
         if x.device().is_cuda() {
             if self.encoding == Encoding::Nvfp4 {
@@ -22,6 +28,10 @@ impl Weights {
             }
             return Ok(crate::cuda::quantized::grouped(x, self, segments)?);
         }
+        ensure!(
+            !self.int8_activations,
+            "INT8 expert activations require CUDA"
+        );
         if self.encoding == Encoding::Nvfp4 {
             return nvfp4::cpu_grouped(x, self, segments);
         }
@@ -31,13 +41,13 @@ impl Weights {
         use rayon::prelude::*;
         let (_, out, input) = self.shape;
         ensure!(
-            self.encoding.int8()
+            self.encoding.integer()
                 && input > 0
                 && out > 0
                 && x.dim(1)? == input
                 && self.codes.is_contiguous()
                 && self.scales.is_contiguous(),
-            "invalid CPU INT8 weights/input"
+            "invalid CPU integer weights/input"
         );
         let (codes, cl) = self.codes.storage_and_layout();
         let (scales, sl) = self.scales.storage_and_layout();
@@ -52,9 +62,9 @@ impl Weights {
             [16, 32, 64, 128].contains(&self.group_size)
                 && input.is_multiple_of(self.group_size)
                 && (!self.encoding.packed() || out.is_multiple_of(8))
-                && codes.len() == self.shape.0 * out * input
-                && scales.len() == codes.len() / self.group_size,
-            "invalid CPU INT8 payload"
+                && codes.len() == self.shape.0 * out * input * self.encoding.code_bits() / 8
+                && scales.len() == self.shape.0 * out * input / self.group_size,
+            "invalid CPU integer payload"
         );
         let mut outputs = Vec::new();
         let mut row = 0;
@@ -63,7 +73,8 @@ impl Weights {
                 e < self.shape.0 && n > 0 && row + n <= x.dim(0)?,
                 "invalid expert segment"
             );
-            let c = &codes[e * out * input..(e + 1) * out * input];
+            let bytes = out * input * self.encoding.code_bits() / 8;
+            let c = &codes[e * bytes..(e + 1) * bytes];
             let s =
                 &scales[e * out * input / self.group_size..(e + 1) * out * input / self.group_size];
             ensure!(
@@ -87,8 +98,10 @@ impl Weights {
                         } else {
                             (r * input + k, (r * input + k) / self.group_size)
                         };
-                        // Preserve the CUDA BF16 operand rounding for weight-only INT8.
-                        *value = bf16::from_f32(c[ci] as i8 as f32 * s[si].to_f32()).to_f32();
+                        // Preserve the CUDA BF16 operand rounding for weight-only execution.
+                        *value =
+                            bf16::from_f32(integer_code(c, ci, self.encoding) * s[si].to_f32())
+                                .to_f32();
                     }
                 });
             let weight = Tensor::from_vec(values, (out, input), x.device())?.to_dtype(x.dtype())?;
@@ -157,7 +170,8 @@ pub fn decode_float_bytes(bytes: &[u8], encoding: Encoding) -> Result<Vec<f32>> 
 }
 pub fn encode(values: &[f32], encoding: Encoding, group: usize) -> Result<(Vec<u8>, Vec<u8>)> {
     ensure!(
-        encoding == Encoding::I8Sym
+        encoding.integer()
+            && !encoding.packed()
             && [16, 32, 64, 128].contains(&group)
             && values.len().is_multiple_of(group),
         "invalid quantization shape/encoding"
@@ -166,14 +180,15 @@ pub fn encode(values: &[f32], encoding: Encoding, group: usize) -> Result<(Vec<u
         values.iter().all(|v| v.is_finite()),
         "cannot quantize nonfinite weights"
     );
-    let mut codes = Vec::with_capacity(values.len());
+    let mut codes = Vec::with_capacity(values.len() * encoding.code_bits() / 8);
     let mut scales = Vec::with_capacity(values.len() / group * 2);
+    let limit = if encoding.int4() { 7. } else { 127. };
     for values in values.chunks_exact(group) {
         let maximum = values.iter().map(|v| v.abs()).fold(0., f32::max);
         let scale = if maximum == 0. {
             f16::ONE
         } else {
-            f16::from_f32((maximum / 127.).max(f16::from_bits(1).to_f32()))
+            f16::from_f32((maximum / limit).max(f16::from_bits(1).to_f32()))
         };
         ensure!(
             scale.is_finite() && scale.to_f32() > 0.,
@@ -181,21 +196,37 @@ pub fn encode(values: &[f32], encoding: Encoding, group: usize) -> Result<(Vec<u
         );
         scales.extend_from_slice(&scale.to_bits().to_le_bytes());
         let scale = scale.to_f32();
-        codes.extend(
-            values
-                .iter()
-                .map(|v| (v / scale).round_ties_even().clamp(-127., 127.) as i8 as u8),
-        );
+        let quantize = |v: f32| (v / scale).round_ties_even().clamp(-limit, limit) as i8 as u8;
+        if encoding.int4() {
+            codes.extend(
+                values
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|v| (quantize(v[0]) & 15) | (quantize(v[1]) << 4)),
+            );
+        } else {
+            codes.extend(values.iter().map(|v| quantize(*v)));
+        }
     }
     Ok((codes, scales))
 }
 
+fn integer_code(codes: &[u8], index: usize, encoding: Encoding) -> f32 {
+    if encoding.int4() {
+        let nibble = (codes[index / 2] >> ((index % 2) * 4)) & 15;
+        ((nibble as i8) << 4 >> 4) as f32
+    } else {
+        codes[index] as i8 as f32
+    }
+}
+
 pub fn decode(codes: &[u8], scales: &[u8], encoding: Encoding, group: usize) -> Result<Vec<f32>> {
     ensure!(
-        encoding == Encoding::I8Sym && [16, 32, 64, 128].contains(&group),
+        encoding.integer() && !encoding.packed() && [16, 32, 64, 128].contains(&group),
         "invalid quantized encoding/group"
     );
-    let count = codes.len();
+    let count = codes.len() * 8 / encoding.code_bits();
     ensure!(
         count.is_multiple_of(group) && scales.len() == count / group * 2,
         "invalid quantized payload length"
@@ -205,7 +236,7 @@ pub fn decode(codes: &[u8], scales: &[u8], encoding: Encoding, group: usize) -> 
             let s = i / group * 2;
             let scale = f16::from_bits(u16::from_le_bytes([scales[s], scales[s + 1]])).to_f32();
             ensure!(scale.is_finite() && scale > 0., "invalid quantized scale");
-            let value = codes[i] as i8 as f32;
+            let value = integer_code(codes, i, encoding);
             Ok(value * scale)
         })
         .collect()
@@ -223,10 +254,10 @@ pub fn repack(
     input: usize,
 ) -> Result<(Vec<u8>, Vec<u8>)> {
     ensure!(
-        from.int8() && to.int8(),
+        from.integer() && to.integer() && from.row_major() == to.row_major(),
         "repacking must preserve the quantized codebook"
     );
-    let count = codes.len();
+    let count = codes.len() * 8 / from.code_bits();
     ensure!(
         [16, 32, 64, 128].contains(&group)
             && input > 0
@@ -245,14 +276,14 @@ pub fn repack(
     );
     let mut next_codes = vec![0; codes.len()];
     let mut next_scales = vec![0; scales.len()];
-    let bytes = 4;
+    let bytes = from.code_bits() / 2;
     for n in (0..out).step_by(8) {
         for k in (0..input).step_by(16) {
             for lane in 0..32 {
                 let packed = ((n / 8 * (input / 16) + k / 16) * 32 + lane) * bytes;
                 let row = (n + lane / 4) * input + k + (lane % 4) * 2;
                 for pair in 0..2 {
-                    let row_byte = row + pair * 8;
+                    let row_byte = (row + pair * 8) * from.code_bits() / 8;
                     let width = bytes / 2;
                     let packed_byte = packed + pair * width;
                     let (source, dest) = if to.packed() {
@@ -321,7 +352,7 @@ mod tests {
     use super::*;
     #[test]
     fn fragment_repacking_preserves_every_code_and_scale() -> Result<()> {
-        for packed in [Encoding::I8Mma] {
+        for packed in [Encoding::I8Mma, Encoding::I4Mma] {
             for group in [16, 32, 64, 128] {
                 let input = 256;
                 let values: Vec<f32> = (0..24 * input)
@@ -335,6 +366,27 @@ mod tests {
                 assert_eq!(scales, round_scales);
             }
         }
+        Ok(())
+    }
+    #[test]
+    fn int4_codes_round_ties_even_and_bound_error() -> Result<()> {
+        let values = [
+            -7., -6., -5., -4., -3., -2., -1., 0., 0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.,
+        ];
+        let (codes, scales) = encode(&values, Encoding::I4Sym, 16)?;
+        assert_eq!(codes, [0xa9, 0xcb, 0xed, 0x0f, 0x20, 0x42, 0x64, 0x76]);
+        assert_eq!(scales, f16::ONE.to_bits().to_le_bytes());
+        let decoded = decode(&codes, &scales, Encoding::I4Sym, 16)?;
+        assert!(
+            values
+                .iter()
+                .zip(decoded)
+                .all(|(a, b)| (a - b).abs() <= 0.5)
+        );
+        assert!(encode(&[f32::INFINITY; 16], Encoding::I4Sym, 16).is_err());
+        assert!(decode(&[0; 8], &[0, 0], Encoding::I4Sym, 16).is_err());
+        let (codes, scales) = encode(&[0.; 16], Encoding::I4Sym, 16)?;
+        assert_eq!(decode(&codes, &scales, Encoding::I4Sym, 16)?, [0.; 16]);
         Ok(())
     }
     #[test]

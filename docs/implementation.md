@@ -92,8 +92,11 @@ configurable bounded amount of scratch across the decoder's synchronizations.
 
 The [self-contained format](model-format.md) stores aligned original or quantized
 payloads and a checksummed MessagePack manifest. Quantized expert GEMMs use
-BF16 tensor-core operands for INT8 or native block-scaled FP4 operands for
-NVFP4, with FP32 accumulation. INT8 dequantizes in registers; NVFP4 quantizes
+BF16 tensor-core operands for INT4/INT8, or native block-scaled FP4 operands for
+NVFP4 on SM120/121, with FP32 accumulation. Other SM80+ GPUs execute NVFP4 with
+exact E2M1/E4M3 block operands in BF16 tensor cores. Integer weights dequantize
+in registers by default; opt-in W4A8/W8A8 uses INT32 group accumulators and
+FP32 scaled sums without expanding resident weights. NVFP4 quantizes
 activation rows dynamically and shares the gate/up input. Optional lossless fragment packing makes weight loads coalesced.
 NVFP4 gate and up projections share a launch with SiLU/multiply while retaining
 the original BF16 rounding points. The single-block NVFP4 path computes routing

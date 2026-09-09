@@ -636,6 +636,7 @@ impl WeightLoader {
         let codes = codes.finish()?;
         let scales = scales.finish()?;
         Ok(Some(crate::quant::Weights {
+            int8_activations: false,
             codes,
             scales,
             encoding,

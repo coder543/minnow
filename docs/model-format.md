@@ -3,8 +3,8 @@
 The `.mnw` file is self-contained. It preserves source config/tokenizer/template
 text and places a bounded MessagePack manifest after aligned tensor regions.
 MessagePack was chosen for a small, inspectable schema without a code generator;
-weights stay outside the manifest so readers can use direct I/O or mmap views.
-The current runtime and converter use O_DIRECT, not mmap.
+weights stay outside the manifest and stream through bounded O_DIRECT reads
+into final allocations. The runtime and converter do not mmap checkpoints.
 
 ## Header and manifest
 
@@ -43,24 +43,30 @@ each tensor's exact source bytes and mixed floating dtypes.
 | `bf16`, `f16`, `f32` | Standard floating-point bits | Original row-major storage |
 | `i8_sym` | Signed INT8, range -127…127 | FP16 scales, row-major |
 | `i8_mma` | Same INT8 codes | Tensor-core fragment order |
+| `i4_sym` | Signed INT4, range -7…7, two's complement, low nibble first | FP16 scales, row-major |
+| `i4_mma` | Same INT4 codes | Tensor-core fragment order |
 | `nvfp4` | E2M1 codes | E4M3/16 block scales, FP32 outer scale, native K64 fragment order |
 
-INT8 groups run along the input dimension and contain 16, 32, 64, or 128
+Integer groups run along the input dimension and contain 16, 32, 64, or 128
 weights (default 128). Each group stores an FP16 scale rounded from
-`max_abs/127`; zero groups use one. Codes use the stored scale and nearest-even
-rounding. Scales must be positive and finite.
+`max_abs/127` for INT8 or `max_abs/7` for INT4; zero groups use one. Nonzero
+scales are clamped to the smallest positive FP16 value before rounding. Codes
+use the stored scale and nearest-even rounding, clamped to the symmetric range.
+Decoders also accept the representable -128/-8 codes. Scales must be positive and finite.
 
 Packed matrices require N divisible by 8 and K divisible by 16. For each N8/K16
 tile, lane `l` contains four codes at row `l/4`, columns
-`2*(l%4) + [0,1,8,9]`. They occupy four consecutive INT8 bytes.
+`2*(l%4) + [0,1,8,9]`. They occupy four consecutive INT8 bytes or two INT4 bytes,
+with consecutive pairs in the low/high nibbles.
 Tile order is `[N/8][K/16][lane]`. FP16 scales use `[N/8][K/group][8]` order.
 Packed experts concatenate directly without runtime repacking or expansion.
 This permutation changes no quantized value or scale.
 
 ## Conversion and mixed precision
 
-`convert OUTPUT --experts int8|nvfp4` defaults to the packed layout. Use
-`--quant-layout row` for plain INT8 layout. `--experts original` preserves source
+`convert OUTPUT --experts int4|int8|nvfp4` accepts a safetensors directory or a
+floating-point `.mnw` input and defaults to the packed layout. Use
+`--quant-layout row` for plain INT4/INT8 layout. `--experts original` preserves source
 precision/layout. A quantized input can be copied or losslessly repacked to the
 same codebook/group size; changing its precision requires the original source.
 For example, an earlier row-layout container can be repacked on local SSD:
@@ -86,8 +92,18 @@ their original dtype. The converter handles one expert at a time (limited to
 the output and publishes atomically without overwriting existing files. Original
 checkpoints are read-only inputs.
 
-CUDA's INT8 path dequantizes into registers and uses BF16 tensor-core operands
-with FP32 accumulation. NVFP4 uses native FP4 tensor cores. Neither stores an
+CUDA's default integer path dequantizes into registers and uses BF16 tensor-core
+operands with FP32 accumulation. `--int8-expert-activations` selects signed INT8
+tensor-core operands on SM80+, for either INT4 or INT8 weights. Each input row
+is quantized independently per weight group: FP32 scale `max_abs/127` (one for
+zero groups, at least the smallest normal FP32 value otherwise), nearest-even
+signed codes clamped to -127…127. Each group's dot accumulates exactly in INT32,
+then contributes `float(dot) * (activation_scale * weight_scale)` to the FP32
+result, which rounds to BF16 at projection output. INT4 expands only in registers.
+This opt-in execution choice is per model instance, not checkpoint metadata.
+
+NVFP4 uses native FP4 tensor cores on SM120/121 and BF16 tensor cores elsewhere.
+None of these paths stores an
 expanded model in system/GPU RAM. CPU execution expands one selected expert at
 a time into an FP32 GEMM buffer. Conversion retains source precision for shared
 experts, attention, routers, embeddings, and the output head; the CPU runtime
@@ -124,8 +140,12 @@ and E4M3 scales directly. FP32 accumulators are multiplied by both outer scales
 and rounded to BF16. No dequantized weights are written to memory. This path
 quantizes both weights and activations.
 
-The separate `compute_120f` PTX module requires CUDA 13 and SM120/121. There is
-no CUDA emulation fallback. The slower CPU software path supports serving and
+The separate `compute_120f` PTX module requires CUDA 13 and SM120/121. On other
+SM80+ GPUs, a separate `compute_80` module stores quantized activation block
+operands as exact BF16 values, decodes packed weights into registers, and uses
+BF16 MMA with FP32 accumulation. It retains the E2M1/E4M3 quantization and outer
+scales; only the tensor-core instruction and activation scratch layout differ.
+Native GB10 dispatch and kernels are preserved. The slower CPU software path supports serving and
 also provides an independent numerical oracle. See [CPU execution](int8-optimizations.md#cpu-execution).
 GPU tests compare activation codes/scales exactly with
 the scalar encoder, then compare native MMA against independently dequantized

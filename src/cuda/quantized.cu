@@ -66,8 +66,14 @@ __device__ __forceinline__ unsigned minnow_bf16_pair(float a, float b) {
   return unsigned(__bfloat16_as_ushort(__float2bfloat16_rn(a)))
       | (unsigned(__bfloat16_as_ushort(__float2bfloat16_rn(b)))<<16);
 }
+template<int Bits=8>
 __device__ __forceinline__ unsigned minnow_weight_pair(const unsigned char* codes,
     float scale, size_t index) {
+  if constexpr (Bits==4) {
+    const unsigned pair=codes[index/2];
+    return minnow_bf16_pair(float((int(pair & 15)^8)-8)*scale,
+        float((int(pair>>4)^8)-8)*scale);
+  }
   const unsigned pair=*reinterpret_cast<const unsigned short*>(codes+index);
   const float a=float(static_cast<signed char>(pair & 255));
   const float b=float(static_cast<signed char>(pair >> 8));
@@ -83,7 +89,7 @@ __device__ __forceinline__ void minnow_mma(float* d, const unsigned* a, const un
 // Register-only dequantization. A weight fragment is reused across every
 // 16-row fragment in the tile. The default packed tile is 16 rows; larger
 // variants remain available for hardware-specific benchmarking.
-template<int Rows,bool Packed=false,bool Pair=false>
+template<int Rows,bool Packed=false,bool Pair=false,int Prefetch=4,int Bits=8>
 __device__ void minnow_quant_mma(const __nv_bfloat16* x,const unsigned char* codes,
     const __half* scales,const int* tiles,__nv_bfloat16* output,int input,int out,int group,int indexed=0) {
   const int warp=(threadIdx.x/32)%4,lane=threadIdx.x%32;
@@ -104,7 +110,7 @@ __device__ void minnow_quant_mma(const __nv_bfloat16* x,const unsigned char* cod
   float acc[Rows/16][2][4]={};
   // Issue independent packed loads ahead of the MMA chain. Four K fragments
   // overlap memory latency without changing the accumulation order.
-  constexpr int Steps=Packed ? 4 : 1;
+  constexpr int Steps=Packed ? Prefetch : 1;
   for (int base=0;base<input;base+=16*Steps) {
     unsigned raw[Steps][2];
     float scale_values[Steps][2];
@@ -117,7 +123,9 @@ __device__ void minnow_quant_mma(const __nv_bfloat16* x,const unsigned char* cod
           const size_t tile=(size_t(expert)*(out/8)+(col+n*8)/8);
           raw[h][n]=0; scale_values[h][n]=0.f;
           if (col+n*8+g<out && k<input) {
-            raw[h][n]=reinterpret_cast<const unsigned*>(codes)[(tile*(input/16)+k/16)*32+lane];
+            const size_t offset=(tile*(input/16)+k/16)*32+lane;
+            if constexpr (Bits==4) raw[h][n]=reinterpret_cast<const unsigned short*>(codes)[offset];
+            else raw[h][n]=reinterpret_cast<const unsigned*>(codes)[offset];
             scale_values[h][n]=__half2float(scales[(tile*(input>>shift)+(k>>shift))*8+g]);
           }
         }
@@ -136,15 +144,22 @@ __device__ void minnow_quant_mma(const __nv_bfloat16* x,const unsigned char* cod
           if constexpr (Packed) {
             const float scale=scale_values[h][n];
             const unsigned values=raw[h][n];
+            if constexpr (Bits==4) {
+              bf[n][0]=minnow_bf16_pair(float((int(values & 15)^8)-8)*scale,
+                  float((int((values>>4)&15)^8)-8)*scale);
+              bf[n][1]=minnow_bf16_pair(float((int((values>>8)&15)^8)-8)*scale,
+                  float((int(values>>12)^8)-8)*scale);
+            } else {
             bf[n][0]=minnow_bf16_pair(float(static_cast<signed char>(values & 255))*scale,
                 float(static_cast<signed char>((values>>8) & 255))*scale);
             bf[n][1]=minnow_bf16_pair(float(static_cast<signed char>((values>>16) & 255))*scale,
                 float(static_cast<signed char>(values>>24))*scale);
+            }
           } else {
             const size_t index=(size_t(expert)*out+c)*input+k+t*2;
             const float scale=__half2float(scales[index>>shift]);
-            bf[n][0]=minnow_weight_pair(codes,scale,index);
-            bf[n][1]=minnow_weight_pair(codes,scale,index+8);
+            bf[n][0]=minnow_weight_pair<Bits>(codes,scale,index);
+            bf[n][1]=minnow_weight_pair<Bits>(codes,scale,index+8);
           }
         }
       }
@@ -181,36 +196,44 @@ __device__ void minnow_quant_mma(const __nv_bfloat16* x,const unsigned char* cod
 #define MINNOW_QUANT_MMA(Bits,Rows) \
 extern "C" __global__ void minnow_quant_mma_##Bits##_##Rows(const __nv_bfloat16* x,const unsigned char* codes, \
     const __half* scales,const int* tiles,__nv_bfloat16* output,int input,int out,int group) { \
-  minnow_quant_mma<Rows>(x,codes,scales,tiles,output,input,out,group); \
+  minnow_quant_mma<Rows,false,false,4,Bits>(x,codes,scales,tiles,output,input,out,group); \
 }
 MINNOW_QUANT_MMA(8,16)
 MINNOW_QUANT_MMA(8,32)
 MINNOW_QUANT_MMA(8,64)
 MINNOW_QUANT_MMA(8,128)
+MINNOW_QUANT_MMA(4,16)
+MINNOW_QUANT_MMA(4,32)
+MINNOW_QUANT_MMA(4,64)
+MINNOW_QUANT_MMA(4,128)
 
 #define MINNOW_QUANT_PACKED(Bits,Rows) \
 extern "C" __global__ void minnow_quant_packed_##Bits##_##Rows(const __nv_bfloat16* x,const unsigned char* codes, \
     const __half* scales,const int* tiles,__nv_bfloat16* output,int input,int out,int group) { \
-  minnow_quant_mma<Rows,true>(x,codes,scales,tiles,output,input,out,group); \
+  minnow_quant_mma<Rows,true,false,4,Bits>(x,codes,scales,tiles,output,input,out,group); \
 }
 MINNOW_QUANT_PACKED(8,16)
 MINNOW_QUANT_PACKED(8,32)
 MINNOW_QUANT_PACKED(8,64)
 MINNOW_QUANT_PACKED(8,128)
+MINNOW_QUANT_PACKED(4,16)
+MINNOW_QUANT_PACKED(4,32)
+MINNOW_QUANT_PACKED(4,64)
+MINNOW_QUANT_PACKED(4,128)
 
 // The two projections retain their BF16 rounding before SiLU and multiplication.
 // Their intermediate tiles stay in shared memory and never enter global storage.
-#define MINNOW_QUANT_INDEXED(Rows,Name,Packed) \
+#define MINNOW_QUANT_INDEXED(Rows,Name,Packed,Prefetch,Bits) \
 extern "C" __global__ void minnow_quant_indexed_##Name##_##Rows(const __nv_bfloat16* x,const unsigned char* codes, \
     const __half* scales,const int* tiles,__nv_bfloat16* output,int input,int out,int group,int indexed) { \
-  minnow_quant_mma<Rows,Packed>(x,codes,scales,tiles,output,input,out,group,indexed); \
+  minnow_quant_mma<Rows,Packed,false,Prefetch,Bits>(x,codes,scales,tiles,output,input,out,group,indexed); \
 } \
 extern "C" __global__ void minnow_quant_pair_##Name##_##Rows(const __nv_bfloat16* x,const unsigned char* codes, \
     const __half* scales,const int* tiles,__nv_bfloat16* output,int input,int out,int group,int indexed, \
     const unsigned char* up,const __half* up_scales) { \
   __shared__ __nv_bfloat16 temp[2*Rows*64]; \
   const int part=threadIdx.x/128; \
-  minnow_quant_mma<Rows,Packed,true>(x,part?up:codes,part?up_scales:scales,tiles,temp+part*Rows*64,input,out,group,indexed); \
+  minnow_quant_mma<Rows,Packed,true,Prefetch,Bits>(x,part?up:codes,part?up_scales:scales,tiles,temp+part*Rows*64,input,out,group,indexed); \
   __syncthreads(); \
   const int row=tiles[blockIdx.y*3+1],rows=tiles[blockIdx.y*3+2]; \
   for (int i=threadIdx.x;i<Rows*64;i+=256) { \
@@ -222,11 +245,27 @@ extern "C" __global__ void minnow_quant_pair_##Name##_##Rows(const __nv_bfloat16
     } \
   } \
 }
-MINNOW_QUANT_INDEXED(16,packed,true)
-MINNOW_QUANT_INDEXED(32,packed,true)
-MINNOW_QUANT_INDEXED(64,packed,true)
-MINNOW_QUANT_INDEXED(128,packed,true)
-MINNOW_QUANT_INDEXED(16,mma,false)
-MINNOW_QUANT_INDEXED(32,mma,false)
-MINNOW_QUANT_INDEXED(64,mma,false)
-MINNOW_QUANT_INDEXED(128,mma,false)
+MINNOW_QUANT_INDEXED(16,packed,true,4,8)
+MINNOW_QUANT_INDEXED(32,packed,true,4,8)
+MINNOW_QUANT_INDEXED(64,packed,true,4,8)
+MINNOW_QUANT_INDEXED(128,packed,true,4,8)
+MINNOW_QUANT_INDEXED(16,mma,false,4,8)
+MINNOW_QUANT_INDEXED(32,mma,false,4,8)
+MINNOW_QUANT_INDEXED(64,mma,false,4,8)
+MINNOW_QUANT_INDEXED(128,mma,false,4,8)
+MINNOW_QUANT_INDEXED(16,packed4,true,2,4)
+MINNOW_QUANT_INDEXED(32,packed4,true,4,4)
+MINNOW_QUANT_INDEXED(64,packed4,true,4,4)
+MINNOW_QUANT_INDEXED(128,packed4,true,4,4)
+MINNOW_QUANT_INDEXED(16,mma4,false,4,4)
+MINNOW_QUANT_INDEXED(32,mma4,false,4,4)
+MINNOW_QUANT_INDEXED(64,mma4,false,4,4)
+MINNOW_QUANT_INDEXED(128,mma4,false,4,4)
+
+// SM86 benefits from a shorter load pipeline. Keep the original four-fragment
+// variants intact for other architectures, including GB10/SM121.
+MINNOW_QUANT_INDEXED(16,ampere,true,2,8)
+extern "C" __global__ void minnow_quant_ampere_16(const __nv_bfloat16* x,const unsigned char* codes,
+    const __half* scales,const int* tiles,__nv_bfloat16* output,int input,int out,int group) {
+  minnow_quant_mma<16,true,false,2>(x,codes,scales,tiles,output,input,out,group);
+}

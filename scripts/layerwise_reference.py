@@ -28,10 +28,19 @@ def run(args):
     dtype = getattr(torch, args.dtype)
     code_model = getattr(args, 'code_model', None) or args.model
     source = str(code_model.resolve())
-    reader = WeightReader(args.model)
+    if args.model.is_file():
+        if not args.code_model:
+            raise ValueError('.mnw references require --code-model with upstream Python code/config assets')
+        from quantized_reference import ContainerReader
+        reader = ContainerReader(args.model, getattr(args, 'int8_expert_activations', False))
+    else:
+        if getattr(args, 'int8_expert_activations', False):
+            raise ValueError('INT8 expert activations require a quantized .mnw checkpoint')
+        reader = WeightReader(args.model)
     try:
         config = AutoConfig.from_pretrained(source, trust_remote_code=True)
-        config = config.__class__.from_dict(json.loads((args.model / 'config.json').read_text()))
+        config = config.__class__.from_dict(reader.config if args.model.is_file()
+            else json.loads((args.model / 'config.json').read_text()))
         config._attn_implementation = 'eager'
         cls = get_class_from_dynamic_module('modeling_llada2_moe.LLaDA2MoeModelLM', source)
         module = sys.modules[cls.__module__]
@@ -84,6 +93,8 @@ def run(args):
                         owner._parameters[leaf] = torch.nn.Parameter(value, requires_grad=False)
                     else:
                         owner._buffers[leaf] = value
+                    if args.model.is_file():
+                        reader.configure_projection(f'model.layers.{i}.{name}', owner)
                 del value, owner
                 layer.eval()
                 handles = [layer.post_attention_layernorm.register_forward_pre_hook(lambda m,a: save(f'layers.{i}.attention', a[0]))]
@@ -122,7 +133,8 @@ if __name__ == '__main__':
     p.add_argument('--model', type=Path, required=True)
     p.add_argument('--output', type=Path, default=Path('artifacts/mini-layerwise'))
     p.add_argument('--input', type=Path)
-    p.add_argument('--code-model', type=Path, help='reference class source, when validating a tiny fixture')
+    p.add_argument('--code-model', type=Path, help='upstream class/config assets; required for .mnw input')
+    p.add_argument('--int8-expert-activations', action='store_true', help='independent W4A8/W8A8 group-dot oracle')
     p.add_argument('--device', default='cuda')
     p.add_argument('--dtype', choices=['float32', 'bfloat16'], default='bfloat16')
     p.add_argument('--prompt', default='Calculate 1+5-28*0.5-200=?')

@@ -276,7 +276,7 @@ impl Moe {
                 ExpertProjection::Quantized(down),
             ] = self.packed.as_slice()
             && [a, b, down].iter().all(|w| w.encoding == a.encoding)
-            && (a.encoding == crate::container::Encoding::Nvfp4 || a.encoding.int8())
+            && (a.encoding == crate::container::Encoding::Nvfp4 || a.encoding.integer())
         {
             let plan = crate::cuda::route_mini_compact(
                 &logits,
@@ -286,10 +286,10 @@ impl Moe {
             if trace.is_some() {
                 record(trace, format!("{name}.router_ids"), &plan.expert_ids()?);
             }
-            let int8 = a.encoding.int8();
-            let hidden = if int8 && fused {
+            let integer = a.encoding.integer();
+            let hidden = if integer && fused {
                 crate::cuda::quantized::routed_silu(x, a, b, &plan)?
-            } else if int8 {
+            } else if integer {
                 silu_mul(
                     &crate::cuda::quantized::routed(x, a, &plan)?,
                     &crate::cuda::quantized::routed(x, b, &plan)?,
@@ -301,7 +301,7 @@ impl Moe {
                 let (gate, up) = crate::cuda::nvfp4::routed_pair(x, a, b, &plan)?;
                 silu_mul(&gate, &up, fused)?
             };
-            let experts = if int8 {
+            let experts = if integer {
                 crate::cuda::quantized::routed(&hidden, down, &plan)?
             } else {
                 crate::cuda::nvfp4::routed(&hidden, down, &plan)?
@@ -442,10 +442,10 @@ impl Moe {
                     && x.dtype() == DType::BF16
                     && let (ExpertProjection::Quantized(a), ExpertProjection::Quantized(b)) =
                         (&self.packed[0], &self.packed[1])
-                    && (a.encoding == crate::container::Encoding::Nvfp4 || a.encoding.int8())
+                    && (a.encoding == crate::container::Encoding::Nvfp4 || a.encoding.integer())
                     && b.encoding == a.encoding
                 {
-                    if a.encoding.int8() {
+                    if a.encoding.integer() {
                         return Ok(crate::cuda::quantized::grouped_silu_indexed(
                             x, a, b, &segments, &token_ids,
                         )?);
@@ -866,6 +866,42 @@ impl Model {
     }
     pub fn set_batched_experts(&mut self, enabled: bool) {
         self.moe_execution.batched_experts = enabled;
+    }
+    /// Select integer tensor cores for INT4/INT8 experts on this instance only.
+    /// Activation quantization is lossy; the default remains BF16 operands.
+    pub fn set_int8_expert_activations(&mut self, enabled: bool) -> Result<()> {
+        if enabled {
+            ensure!(
+                self.device.is_cuda() && self.dtype == DType::BF16,
+                "INT8 expert activations require CUDA and BF16 model activations"
+            );
+            #[cfg(feature = "cuda")]
+            if let Device::Cuda(device) = &self.device {
+                let capability = device.cuda_stream().context().compute_capability()?;
+                ensure!(
+                    capability >= (8, 0),
+                    "INT8 expert activations require SM80 or newer"
+                );
+            }
+        }
+        let mut found = false;
+        for layer in &mut self.layers {
+            if let FeedForward::Sparse(moe) = &mut layer.mlp {
+                for projection in &mut moe.packed {
+                    if let ExpertProjection::Quantized(w) = projection
+                        && w.encoding.integer()
+                    {
+                        w.int8_activations = enabled;
+                        found = true;
+                    }
+                }
+            }
+        }
+        ensure!(
+            !enabled || found,
+            "INT8 expert activations require INT4 or INT8 expert weights"
+        );
+        Ok(())
     }
     pub fn set_compact_decode_experts(&mut self, enabled: bool) {
         self.moe_execution.compact_decode_experts = enabled;

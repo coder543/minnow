@@ -10,7 +10,13 @@ use minnow::{
 #[test]
 fn cpu_quantized_experts_match_row_major_oracle() -> anyhow::Result<()> {
     Device::Cpu.with_context(|| -> anyhow::Result<()> {
-        for encoding in [Encoding::I8Sym, Encoding::I8Mma, Encoding::Nvfp4] {
+        for encoding in [
+            Encoding::I8Sym,
+            Encoding::I8Mma,
+            Encoding::I4Sym,
+            Encoding::I4Mma,
+            Encoding::Nvfp4,
+        ] {
             for input in [192, 512, 1024, 2048, 4096] {
                 let (experts, out, rows) = (3, 24, 7);
                 let mut codes = vec![];
@@ -29,13 +35,14 @@ fn cpu_quantized_experts_match_row_major_oracle() -> anyhow::Result<()> {
                         scales.extend(s);
                         globals.push(g);
                     } else {
-                        let (c, s) = quant::encode(&values, Encoding::I8Sym, 64)?;
+                        let (c, s) = quant::encode(&values, encoding.row_major(), 64)?;
                         decoded.extend(
-                            quant::decode(&c, &s, Encoding::I8Sym, 64)?
+                            quant::decode(&c, &s, encoding.row_major(), 64)?
                                 .into_iter()
                                 .map(|v| bf16::from_f32(v).to_f32()),
                         );
-                        let (c, s) = quant::repack(&c, &s, Encoding::I8Sym, encoding, 64, input)?;
+                        let (c, s) =
+                            quant::repack(&c, &s, encoding.row_major(), encoding, 64, input)?;
                         codes.extend(c);
                         scales.extend(s);
                     }
@@ -60,6 +67,7 @@ fn cpu_quantized_experts_match_row_major_oracle() -> anyhow::Result<()> {
                     Tensor::from_vec(v, len + 1, &Device::Cpu)?.narrow(0, 1, len)?
                 };
                 let weight = Weights {
+                    int8_activations: false,
                     codes: Tensor::from_vec(codes, code_len + 1, &Device::Cpu)?
                         .narrow(0, 1, code_len)?,
                     scales,

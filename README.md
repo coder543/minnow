@@ -13,12 +13,13 @@ the client with prefill progress, useful token rates, and refinement statistics.
 - Linux and Rust. CPU builds require no CUDA installation.
 - For GPU acceleration: Git, CUDA 13 or later (`nvcc` on PATH, or set `NVCC`),
   and an NVIDIA GPU with BF16 support (Ampere or newer).
-  **Native NVFP4 CUDA execution requires SM120/121**, such as RTX Blackwell or GB10.
+  NVFP4 uses native FP4 tensor cores on SM120/121 (RTX Blackwell or GB10),
+  and a BF16 tensor-core fallback on other Ampere-or-newer GPUs.
 - A local model checkpoint on a filesystem supporting direct I/O (`O_DIRECT`).
 
 Only routed experts are quantized; attention, shared experts, embeddings, and the
 output head retain their source precision. Approximate mini weight sizes are
-30.3 GiB for BF16, 16.3 GiB for INT8, and 9.8 GiB for NVFP4. Allow additional
+30.3 GiB for BF16, 16.3 GiB for INT8, 9.1 GiB for INT4, and 9.8 GiB for NVFP4. Allow additional
 memory for K/V, activations, and CUDA workspaces. See [memory configuration](docs/memory.md).
 
 ## Build and run
@@ -27,6 +28,15 @@ Download [LLaDA2.2-mini](https://huggingface.co/inclusionAI/LLaDA2.2-mini) or
 [LLaDA2.2-flash](https://huggingface.co/inclusionAI/LLaDA2.2-flash), including its
 configuration, tokenizer, and chat template. Pass the checkpoint location
 explicitly with `--model`; there is no assumed installation directory.
+
+Preconverted mini containers are available from
+[coder543/LLaDA2.2-mini-minnow](https://huggingface.co/coder543/LLaDA2.2-mini-minnow):
+
+```sh
+hf download coder543/LLaDA2.2-mini-minnow \
+  llada2.2-mini-bf16.mnw llada2.2-mini-int8.mnw llada2.2-mini-nvfp4.mnw \
+  --local-dir models
+```
 
 ```sh
 cargo build --release --features cuda
@@ -51,7 +61,7 @@ target/release/minnow --model models/mini-int8.mnw --device cpu serve
 `--device auto` (the default) selects CUDA when available, otherwise CPU.
 `--dtype auto` uses BF16 on CUDA and FP32 on CPU. A CUDA build still requires
 its linked NVIDIA libraries to start; use the CPU build on systems without them.
-CPU execution supports floating, INT8, and NVFP4 checkpoints with the same API,
+CPU execution supports floating, INT4, INT8, and NVFP4 checkpoints with the same API,
 caching, and streaming behavior, but is substantially slower than CUDA. Quantized
 experts stay compressed; the CPU expands one selected expert at a time for GEMM.
 Unquantized weights use FP32 on CPU, so budget twice their BF16 storage size,
@@ -66,6 +76,7 @@ acceleration is not supported by this build; those systems can use the CPU path.
 Conversion produces a self-contained `.mnw` file with weights, tokenizer,
 configuration, and chat template. It streams the source and does not load a
 complete model into memory. Existing destinations are never overwritten.
+The source may be a safetensors directory or a floating-point `.mnw` file.
 
 ```sh
 # Blackwell: native FP4 tensor cores for both prefill and decode.
@@ -76,18 +87,28 @@ target/release/minnow --model models/LLaDA2.2-mini \
 target/release/minnow --model models/LLaDA2.2-mini \
   convert models/mini-int8.mnw --experts int8
 
+# Quantize directly from a self-contained BF16 checkpoint.
+target/release/minnow --model models/llada2.2-mini-bf16.mnw \
+  convert models/llada2.2-mini-int4.mnw --experts int4
+
 target/release/minnow --model models/mini-nvfp4.mnw serve
 ```
 
 NVFP4 uses E2M1 weights and activations, E4M3 scales per 16 values, and FP32
-accumulation. INT8 uses groups of 128 weights with FP16 scales and dequantizes
-into BF16 tensor-core registers. Both change model numerics; throughput results
+accumulation. INT4 and INT8 use groups of 128 weights with FP16 scales and dequantize
+into BF16 tensor-core registers by default. All quantizations change model numerics; throughput results
 are not evidence of equal answer quality. Convert from floating-point weights.
 `--tensor-rules` permits mixed precision by layer or projection.
 Use `minnow --model models/mini-int8.mnw validate` to verify checkpoint
 checksums separately from loading. See [formats and conversion](docs/model-format.md).
 
-INT8 and NVFP4 use fused gate/up/SiLU kernels and GPU routing for 32-token decode
+`--int8-expert-activations` opts an instance with INT4/INT8 weights into W4A8/W8A8
+integer tensor cores on SM80 and newer. It dynamically quantizes activations per
+group, accumulates in INT32, then applies scales in FP32. This changes numerics
+again; it is independent of checkpoint storage and leaves the default GB10 paths
+unchanged. See [RTX 3090 measurements](docs/rtx3090.md).
+
+INT4, INT8, and NVFP4 use fused gate/up/SiLU kernels and GPU routing for 32-token decode
 blocks by default. `--host-routing` and `--unfused-activation` provide comparison
 paths. Block FlashAttention improves long-prompt prefill by keeping attention scores
 on chip and is the default on supported CUDA shapes. `--materialized-attention`
@@ -133,7 +154,7 @@ cargo test --release --features cuda --lib -- --ignored --test-threads=1
 cargo clippy --all-targets --features cuda -- -D warnings
 ```
 
-Ignored tests require compatible CUDA hardware; the NVFP4 tests require SM120/121.
+Ignored tests require compatible CUDA hardware (SM80 or newer).
 Tests cover model/reference agreement, cache commits, decoding, container
 integrity, and CUDA kernels against independent numerical oracles.
 
@@ -143,5 +164,6 @@ integrity, and CUDA kernels against independent numerical oracles.
 
 Pointwise, normalization, and routing kernels target `compute_80` by default;
 `MINNOW_CUDA_ARCH` overrides their PTX target. Block FlashAttention uses
-`compute_80`; Candle and cuBLAS build separately. NVFP4 builds as a
-separate `compute_120f` module and always uses native Blackwell FP4 instructions.
+`compute_80`; Candle and cuBLAS build separately. Native NVFP4 builds as a separate
+`compute_120f` module. Its fallback and the opt-in integer kernels use separate
+`compute_80` modules, selected independently of `MINNOW_CUDA_ARCH`.

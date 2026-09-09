@@ -31,6 +31,7 @@ fn main() -> anyhow::Result<()> {
             globals.push(g);
         }
         let w = Weights {
+            int8_activations: false,
             codes: Tensor::from_vec(codes, experts * out * input / 2, &dev)?,
             scales: Tensor::from_vec(scales, experts * out * input / 16, &dev)?,
             global_scales: Some(Tensor::from_vec(globals, experts, &dev)?),

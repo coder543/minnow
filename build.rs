@@ -23,6 +23,22 @@ fn main() {
         .status()
         .expect("nvcc is required when building with --features cuda");
     assert!(status.success(), "compiling minnow CUDA kernels failed");
+    let status = Command::new(env::var_os("NVCC").unwrap_or_else(|| "nvcc".into()))
+        .args([
+            "-ptx",
+            "-arch=compute_80",
+            "-O3",
+            "--fmad=false",
+            "src/cuda/quantized_int8.cu",
+            "-o",
+        ])
+        .arg(output.join("minnow-int8.ptx"))
+        .status()
+        .expect("nvcc is required");
+    assert!(
+        status.success(),
+        "compiling integer tensor-core kernels failed"
+    );
     // Native block-scaled FP4 is separate from portable BF16 PTX. SM120f
     // supports SM120/121; the runtime checks capability before loading weights.
     let status = Command::new(env::var_os("NVCC").unwrap_or_else(|| "nvcc".into()))
@@ -38,6 +54,21 @@ fn main() {
         .status()
         .expect("nvcc is required");
     assert!(status.success(), "compiling native NVFP4 kernels failed");
+    // Ampere/Ada keep the same packed checkpoint and activation quantization,
+    // executing the scaled FP4 operands with BF16 tensor cores instead.
+    let status = Command::new(env::var_os("NVCC").unwrap_or_else(|| "nvcc".into()))
+        .args([
+            "-ptx",
+            "-arch=compute_80",
+            "-O3",
+            "--fmad=false",
+            "src/cuda/nvfp4_ampere.cu",
+            "-o",
+        ])
+        .arg(output.join("minnow-nvfp4-bf16.ptx"))
+        .status()
+        .expect("nvcc is required");
+    assert!(status.success(), "compiling BF16 NVFP4 kernels failed");
     println!("cargo:rerun-if-changed=vendor/flash-attention");
     let includes = cudaforge::DependencyManager::new()
         .with_cutlass(Some("7d49e6c7e2f8896c47f586706e67e1fb215529dc"))

@@ -20,7 +20,7 @@ fn main() -> anyhow::Result<()> {
         let values: Vec<f32> = (0..out * input)
             .map(|i| ((i * 17 % 257) as f32 - 128.) / 1000.)
             .collect();
-        for mode in ["bf16", "int8", "nvfp4"] {
+        for mode in ["bf16", "int4", "int8", "int4-a8", "int8-a8", "nvfp4"] {
             if filter("MINNOW_BENCH_MODE", mode) {
                 continue;
             }
@@ -42,6 +42,8 @@ fn main() -> anyhow::Result<()> {
                     let native = mode == "nvfp4";
                     let encoding = if native {
                         Encoding::Nvfp4
+                    } else if mode.starts_with("int4") {
+                        Encoding::I4Mma
                     } else {
                         Encoding::I8Mma
                     };
@@ -81,6 +83,7 @@ fn main() -> anyhow::Result<()> {
                     (
                         None,
                         Some(Weights {
+                            int8_activations: mode.ends_with("-a8"),
                             codes: Tensor::from_vec(c, experts * codes.len(), &dev)?,
                             scales,
                             global_scales: global

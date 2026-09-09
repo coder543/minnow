@@ -45,6 +45,7 @@ fn main() -> anyhow::Result<()> {
                 .map(|b| f16::from_bits(u16::from_le_bytes(*b)))
                 .collect();
             let weight = Weights {
+                int8_activations: false,
                 global_scales: None,
                 codes: Tensor::from_vec(codes.clone(), codes.len(), &dev)?,
                 scales: Tensor::from_vec(scales.clone(), scales.len(), &dev)?,

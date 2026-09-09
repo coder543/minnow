@@ -70,6 +70,10 @@ def main():
     p.add_argument('--a', type=Path, required=True)
     p.add_argument('--b', type=Path, required=True)
     p.add_argument('--input', type=Path, required=True)
+    p.add_argument('--model', type=Path, required=True)
+    p.add_argument('--workspace-cache-mib', type=int, default=512)
+    p.add_argument('--a-int8-expert-activations', action='store_true')
+    p.add_argument('--b-int8-expert-activations', action='store_true')
     p.add_argument('--cases', type=Path, default=Path('tests/decode_natural_cases.json'))
     p.add_argument('--output', type=Path, default=Path('artifacts/arch-comparison'))
     p.add_argument('--prefill-iterations', type=int, default=5)
@@ -81,6 +85,9 @@ def main():
         'order': ['a', 'b', 'b', 'a'],
         'binaries': {k: {'path': str(v), 'sha256': digest(v)} for k, v in binaries.items()},
         'input_sha256': digest(args.input), 'cases_sha256': digest(args.cases),
+        'model': str(args.model.resolve()),
+        'workspace_cache_mib': args.workspace_cache_mib,
+        'int8_expert_activations': {'a': args.a_int8_expert_activations, 'b': args.b_int8_expert_activations},
         'source_sha256': {str(f): digest(f) for f in sorted(Path('src').rglob('*')) if f.is_file()},
         'build_rs_sha256': digest('build.rs'),
         'runs': [],
@@ -93,7 +100,10 @@ def main():
     for index, target in enumerate(report['order']):
         for mode, tail in commands.items():
             stem = args.output / f'{index + 1}-{target}-{mode}'
-            command = [str(binaries[target]), *tail]
+            command = [str(binaries[target]), '--model', str(args.model.resolve()),
+                       '--workspace-cache-mib', str(args.workspace_cache_mib), *tail]
+            if report['int8_expert_activations'][target]:
+                command.insert(1, '--int8-expert-activations')
             gpu = subprocess.check_output(['nvidia-smi', '--query-gpu=temperature.gpu,power.draw,clocks.sm', '--format=csv,noheader'], text=True).strip()
             print(f'Round {index + 1}/4 target {target}: {mode}; GPU {gpu}', flush=True)
             start = time.monotonic()

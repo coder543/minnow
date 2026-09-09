@@ -3,7 +3,7 @@
 Small checked-in fixtures exercise the checkpoint's model classes, block
 attention, MoE routing, cache commits, and decoder edge cases. They do not need
 trained weights or Python. CUDA tests compare fused kernels with independent
-numerical oracles; NVFP4 tests require SM120/121 hardware.
+numerical oracles on SM80+ hardware, including the NVFP4 fallback and integer MMA.
 
 ```sh
 cargo test --release
@@ -48,7 +48,7 @@ block FlashAttention and the materialized-attention comparison commands.
 ## Independent reference
 
 Python is an oracle, not a runtime dependency. The reference scripts require
-PyTorch with CUDA, Transformers, NumPy, and safetensors, plus the checkpoint's
+PyTorch with CUDA, Transformers, NumPy, safetensors, and msgpack, plus the checkpoint's
 Python model files. The recorded reference environment uses PyTorch 2.10.0 and
 Transformers 5.2.0. Run it sequentially with minnow stopped.
 
@@ -56,6 +56,12 @@ Transformers 5.2.0. Run it sequentially with minnow stopped.
 `scripts/reference_generate.py` uses meta initialization and direct parameter
 assignment for one resident BF16 model. Both require an explicit `--model` path.
 They never build a complete host model and then copy it to CUDA.
+
+The layerwise oracle also accepts `.mnw` input. Supply `--code-model` with the
+upstream Python/config assets. It independently decodes one quantized projection
+at a time and retains one transformer layer. Add `--int8-expert-activations` to
+check W4A8/W8A8 group-dot arithmetic; omit it for BF16 expert activations. NVFP4
+uses independently quantized E2M1/E4M3 operands and FP32 outer scales.
 
 ```sh
 python3 scripts/layerwise_reference.py --model models/LLaDA2.2-mini \

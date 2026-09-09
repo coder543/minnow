@@ -28,6 +28,9 @@ struct Cli {
     /// auto uses BF16 on CUDA and FP32 on CPU.
     #[arg(long, global = true, value_enum, default_value = "auto")]
     dtype: Precision,
+    /// Quantize INT4/INT8 expert activations to INT8 (SM80+, changes numerics).
+    #[arg(long, global = true)]
+    int8_expert_activations: bool,
     /// Use individual expert GEMMs for comparison with the batched CUDA path.
     #[arg(long, global = true)]
     serial_experts: bool,
@@ -43,7 +46,7 @@ struct Cli {
     /// Use materialized attention instead of the default block FlashAttention.
     #[arg(long, global = true)]
     materialized_attention: bool,
-    /// Use host routing for comparisons (INT8/NVFP4 decode defaults to GPU).
+    /// Use host routing for comparisons (INT4/INT8/NVFP4 decode defaults to GPU).
     #[arg(long, global = true, conflicts_with = "device_routing")]
     host_routing: bool,
     /// Materialize expert gathering, FP32 weighting, and reduction intermediates.
@@ -79,9 +82,9 @@ enum Command {
     Convert {
         output: PathBuf,
         /// Quantize routed expert projections; other weights retain their dtype.
-        #[arg(long, value_parser = ["original", "int8", "nvfp4"], default_value = "original")]
+        #[arg(long, value_parser = ["original", "int4", "int8", "nvfp4"], default_value = "original")]
         experts: String,
-        /// Quantization group size (default: 128 for INT8, 16 for NVFP4).
+        /// Quantization group size (default: 128 for INT4/INT8, 16 for NVFP4).
         #[arg(long, default_value_t = 0)]
         group_size: usize,
         /// CUDA fragment packing is lossless; row layout is available for comparisons.
@@ -274,6 +277,11 @@ async fn main() -> Result<()> {
             let options = Conversion {
                 expert_encoding: match experts.as_str() {
                     "nvfp4" => Some(Encoding::Nvfp4),
+                    "int4" => Some(if quant_layout == "mma" {
+                        Encoding::I4Mma
+                    } else {
+                        Encoding::I4Sym
+                    }),
                     "int8" => Some(if quant_layout == "mma" {
                         Encoding::I8Mma
                     } else {
@@ -338,10 +346,15 @@ async fn main() -> Result<()> {
         Precision::F32 => DType::F32,
     };
     tracing::info!(?device, ?dtype, "execution backend");
+    ensure!(
+        !cli.int8_expert_activations || (device.is_cuda() && dtype == DType::BF16),
+        "INT8 expert activations require CUDA and BF16 model activations"
+    );
     let start = Instant::now();
     let mut model =
         Model::load_with_memory_reserve(&model_path, dtype, &device, cli.memory_reserve_mib)?;
     model.set_workspace_cache_mib(cli.workspace_cache_mib)?;
+    model.set_int8_expert_activations(cli.int8_expert_activations)?;
     model.set_batched_experts(!cli.serial_experts);
     model.set_compact_decode_experts(cli.compact_decode_experts);
     model.set_fused_activation(!cli.unfused_activation);
@@ -598,7 +611,7 @@ async fn main() -> Result<()> {
                         }
                     }
                     let mean = times.iter().sum::<f64>() / times.len() as f64;
-                    let report = json!({"prompt_tokens":n,"iterations":iterations,"warmups":2,"seconds":times,"mean_seconds":mean,"tokens_per_second":n as f64 / mean,"max_chunk_tokens":chunk_size,"attention_chunk_tokens":model.attention_chunk_tokens(),"forwards":forwards,"batched_experts":!cli.serial_experts,"fused_attention":!cli.unfused_attention,"flash_attention":model.uses_flash_attention(),"fused_expert_mix":!cli.unfused_expert_mix,"dtype":format!("{dtype:?}")});
+                    let report = json!({"prompt_tokens":n,"iterations":iterations,"warmups":2,"seconds":times,"mean_seconds":mean,"tokens_per_second":n as f64 / mean,"max_chunk_tokens":chunk_size,"attention_chunk_tokens":model.attention_chunk_tokens(),"forwards":forwards,"int8_expert_activations":cli.int8_expert_activations,"batched_experts":!cli.serial_experts,"fused_attention":!cli.unfused_attention,"flash_attention":model.uses_flash_attention(),"fused_expert_mix":!cli.unfused_expert_mix,"dtype":format!("{dtype:?}")});
                     tracing::info!(%report,"prefill benchmark");
                     reports.push(report);
                 }
@@ -655,7 +668,7 @@ async fn main() -> Result<()> {
                 #[cfg(feature = "cuda")]
                 drop(capture);
                 if cached_only {
-                    let report = json!({"prefix_tokens":prefix.len(),"current_tokens":b,"iterations":iterations,"cached_forward_seconds":cached_seconds,"dtype":format!("{dtype:?}"),"batched_experts":!cli.serial_experts});
+                    let report = json!({"prefix_tokens":prefix.len(),"current_tokens":b,"iterations":iterations,"cached_forward_seconds":cached_seconds,"dtype":format!("{dtype:?}"),"int8_expert_activations":cli.int8_expert_activations,"batched_experts":!cli.serial_experts});
                     tracing::info!(%report,"benchmark");
                     reports.push(report);
                     continue;
@@ -670,7 +683,7 @@ async fn main() -> Result<()> {
                 }
                 device.synchronize()?;
                 let full_seconds = start.elapsed().as_secs_f64() / iterations as f64;
-                let report = json!({"prefix_tokens":prefix.len(),"current_tokens":b,"iterations":iterations,"cached_forward_seconds":cached_seconds,"full_forward_seconds":full_seconds,"speedup":full_seconds/cached_seconds,"dtype":format!("{dtype:?}"),"batched_experts":!cli.serial_experts,"fused_activation":!cli.unfused_activation});
+                let report = json!({"prefix_tokens":prefix.len(),"current_tokens":b,"iterations":iterations,"cached_forward_seconds":cached_seconds,"full_forward_seconds":full_seconds,"speedup":full_seconds/cached_seconds,"dtype":format!("{dtype:?}"),"int8_expert_activations":cli.int8_expert_activations,"batched_experts":!cli.serial_experts,"fused_activation":!cli.unfused_activation});
                 tracing::info!(%report,"benchmark");
                 reports.push(report);
             }
@@ -748,6 +761,7 @@ async fn main() -> Result<()> {
                     "name":case["name"], "prompt_tokens":prompt.len(), "max_tokens":options.max_tokens,
                     "iterations":iterations, "warmups":1, "mean_seconds":seconds/iterations as f64,
                     "compact_decode_experts":cli.compact_decode_experts,
+                    "int8_expert_activations":cli.int8_expert_activations,
                     "mean_decode_seconds":decode_seconds/iterations as f64,
                     "mean_model_tokens":count as f64/iterations as f64,
                     "mean_text_tokens":text_count as f64/iterations as f64,
