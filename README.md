@@ -8,6 +8,31 @@ LLaDA generates by refining 32-token blocks. Minnow caches committed blocks and
 recomputes only the current block during refinement. Completed blocks stream to
 the client with prefill progress, useful token rates, and refinement statistics.
 
+## Measured performance
+
+### RTX 3090 (24 GiB)
+
+LLaDA2.2-mini, one request at a time, CUDA 13, a 420 W GPU power limit, BF16 dense
+layers, FlashAttention, and a 512 MiB workspace cache. Rates below are **tokens/second**:
+
+| Expert execution | 4,096-token prefill | LHC decode | React TypeScript decode | Fellowship decode |
+| --- | ---: | ---: | ---: | ---: |
+| INT8 / BF16 activations | 13,094 | 210 | 667 | 151 |
+| INT4 / INT8 activations | 15,667 | 238 | 697 | 194 |
+| NVFP4 / BF16 tensor-core fallback | 11,578 | 133 | 300 | 108 |
+
+Prefill averages ten samples and excludes loading and the vocabulary head.
+Decode averages four warmed runs of each [prompt](tests/decode_natural_cases.json),
+using default greedy diffusion settings and a 512-token output cap; it counts
+generated text tokens and excludes prefill. Quantizations produce different
+responses and refinement counts, so decode rates depend on both the prompt and
+numerics. INT4 here uses `--int8-expert-activations`.
+See [full RTX 3090 measurements and validation](docs/rtx3090.md).
+
+The BF16 Transformers reference is not benchmarked on this GPU: its weights
+alone require about 30.3 GiB, exceeding the 24 GiB VRAM before activations or K/V.
+Layerwise reference checks fit, but do not measure end-to-end generation speed.
+
 ## Requirements
 
 - Linux and Rust. CPU builds require no CUDA installation.
