@@ -60,6 +60,13 @@ fn fp4_code(value: f32) -> u8 {
 }
 /// Plain E2M1 nibbles/E4M3 scales, and a multiplicative FP32 tensor scale.
 pub fn encode(values: &[f32]) -> Result<(Vec<u8>, Vec<u8>, f32)> {
+    encode_impl(values, true)
+}
+/// Conversion already parallelizes across matrices; keep its worker count bounded.
+pub(crate) fn encode_serial(values: &[f32]) -> Result<(Vec<u8>, Vec<u8>, f32)> {
+    encode_impl(values, false)
+}
+fn encode_impl(values: &[f32], parallel: bool) -> Result<(Vec<u8>, Vec<u8>, f32)> {
     ensure!(
         !values.is_empty()
             && values.len().is_multiple_of(16)
@@ -90,7 +97,7 @@ pub fn encode(values: &[f32]) -> Result<(Vec<u8>, Vec<u8>, f32)> {
             }
         }
     };
-    if values.len() > 65536 {
+    if parallel && values.len() > 65536 {
         use rayon::prelude::*;
         codes
             .par_chunks_mut(8192)
@@ -252,6 +259,15 @@ pub(super) fn cpu_grouped(x: &Tensor, w: &Weights, segments: &[(usize, usize)]) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn serial_conversion_matches_parallel_encoding() -> Result<()> {
+        let values: Vec<_> = (0..131072 + 16)
+            .map(|i| ((i * 131 % 1009) as f32 - 504.) / 127.)
+            .collect();
+        assert_eq!(encode(&values)?, encode_serial(&values)?);
+        Ok(())
+    }
     #[test]
     fn nvfp4_scale_rounding_packing_and_error() -> Result<()> {
         for code in 0..127 {

@@ -189,6 +189,25 @@ impl Drop for Writer {
 }
 
 pub fn convert(source: &Path, destination: &Path, options: &Conversion) -> Result<Container> {
+    convert_with_workers(source, destination, options, 0)
+}
+
+/// Zero workers selects up to eight CPUs. Each worker owns one direct-I/O buffer
+/// and quantizes at most one bounded expert matrix, with one queued result.
+pub fn convert_with_workers(
+    source: &Path,
+    destination: &Path,
+    options: &Conversion,
+    workers: usize,
+) -> Result<Container> {
+    ensure!(workers <= 64, "conversion supports at most 64 workers");
+    let workers = if workers == 0 {
+        std::thread::available_parallelism()
+            .map_or(1, usize::from)
+            .min(8)
+    } else {
+        workers
+    };
     let loader = WeightLoader::open(source)?;
     let mut assets = BTreeMap::new();
     for name in [
@@ -279,88 +298,180 @@ pub fn convert(source: &Path, destination: &Path, options: &Conversion) -> Resul
     };
     let mut writer = Writer::new(destination)?;
     writer.write(&[0; ALIGNMENT as usize])?;
-    for (index, (name, shape, original)) in inventory.iter().enumerate() {
-        let (encoding, group_size) =
-            options.for_tensor(name, *original, loader.quantization_group(name)?)?;
-        let offset = writer.align()?;
-        let mut hash = blake3::Hasher::new();
+    let workers = workers.min(inventory.len().max(1));
+    tracing::info!(workers, "converting with bounded parallel workers");
+    std::thread::scope(|scope| -> Result<()> {
+        let mut receivers = Vec::with_capacity(workers);
+        for worker in 0..workers {
+            let (send, receive) = std::sync::mpsc::sync_channel(1);
+            receivers.push(receive);
+            let mut staging = Staging::new()?;
+            let inventory = &inventory;
+            let loader = &loader;
+            scope.spawn(move || {
+                for index in (worker..inventory.len()).step_by(workers) {
+                    let (name, shape, original) = &inventory[index];
+                    let result =
+                        prepare_tensor(loader, &mut staging, name, shape, *original, options)
+                            .with_context(|| format!("converting {name}"));
+                    let failed = result.is_err();
+                    if send.send(result).is_err() || failed {
+                        break;
+                    }
+                }
+            });
+        }
+        // Receive in inventory order so offsets, manifests and hashes are identical
+        // at every worker count. Dropping receivers on failure releases all senders
+        // before the scope joins; writer failure cannot deadlock a full queue.
+        for (index, (name, shape, _)) in inventory.iter().enumerate() {
+            let prepared = receivers[index % workers]
+                .recv()
+                .context("conversion worker stopped before returning its tensor")??;
+            let encoding = prepared.encoding;
+            let group_size = prepared.group_size;
+            let offset = writer.align()?;
+            let mut scales = Vec::new();
+            let mut global_scale = None;
+            let mut scale_checksum = String::new();
+            let checksum = if let Some(quantized) = prepared.quantized {
+                writer.write(&quantized.codes)?;
+                scales = quantized.scales;
+                global_scale = quantized.global_scale;
+                scale_checksum = quantized.scale_checksum;
+                quantized.checksum
+            } else {
+                let mut hash = blake3::Hasher::new();
+                loader.visit_tensor(name, |input| {
+                    hash.update(input);
+                    writer.write(input)?;
+                    Ok(())
+                })?;
+                hash.finalize().to_hex().to_string()
+            };
+            let data = Region {
+                offset,
+                bytes: writer.position - offset,
+                blake3: checksum,
+            };
+            let scales = if scales.is_empty() {
+                None
+            } else {
+                let offset = writer.align()?;
+                writer.write(&scales)?;
+                Some(Region {
+                    offset,
+                    bytes: scales.len() as u64,
+                    blake3: scale_checksum,
+                })
+            };
+            let tensor = TensorInfo {
+                shape: shape.clone(),
+                encoding,
+                data,
+                scales,
+                group_size,
+                global_scale,
+            };
+            tensor.validate()?;
+            manifest.tensors.insert(name.clone(), tensor);
+            if index % 256 == 0 || index + 1 == inventory.len() {
+                tracing::info!(
+                    tensors = index + 1,
+                    total = inventory.len(),
+                    gib = writer.position as f64 / 1073741824.,
+                    "converting checkpoint"
+                );
+            }
+        }
+        Ok(())
+    })?;
+    writer.finish(&manifest, destination)
+}
+
+struct PreparedTensor {
+    encoding: Encoding,
+    group_size: usize,
+    quantized: Option<QuantizedTensor>,
+}
+struct QuantizedTensor {
+    codes: Vec<u8>,
+    scales: Vec<u8>,
+    global_scale: Option<f32>,
+    checksum: String,
+    scale_checksum: String,
+}
+fn prepare_tensor(
+    loader: &WeightLoader,
+    staging: &mut Staging,
+    name: &str,
+    shape: &[usize],
+    original: Encoding,
+    options: &Conversion,
+) -> Result<PreparedTensor> {
+    let (encoding, group_size) =
+        options.for_tensor(name, original, loader.quantization_group(name)?)?;
+    let quantized = if encoding.quantized() {
         let mut scales = Vec::new();
         let mut global_scale = None;
-        if encoding.quantized() {
-            // One expert at a time, bounded above before opening the output.
-            let mut bytes = Vec::new();
-            loader.visit_tensor(name, |input| {
-                bytes.extend_from_slice(input);
-                Ok(())
-            })?;
-            let (codes, converted_scales) = if encoding == Encoding::Nvfp4 {
-                if *original == Encoding::Nvfp4 {
-                    global_scale = loader.global_scale(name)?;
-                    loader.visit_scales(name, |input| {
-                        scales.extend_from_slice(input);
-                        Ok(())
-                    })?;
-                    (bytes, scales)
-                } else {
-                    let values = crate::quant::decode_float_bytes(&bytes, *original)?;
-                    let (codes, scales, global) = crate::quant::nvfp4::encode(&values)?;
-                    global_scale = Some(global);
-                    crate::quant::nvfp4::pack(&codes, &scales, shape[1], false)?
-                }
-            } else if original.quantized() {
+        let mut bytes = Vec::new();
+        loader.visit_tensor_with_staging(name, staging, |input| {
+            bytes.extend_from_slice(input);
+            Ok(())
+        })?;
+        let (codes, converted_scales) = if encoding == Encoding::Nvfp4 {
+            if original == Encoding::Nvfp4 {
+                global_scale = loader.global_scale(name)?;
                 loader.visit_scales(name, |input| {
                     scales.extend_from_slice(input);
                     Ok(())
                 })?;
-                crate::quant::repack(&bytes, &scales, *original, encoding, group_size, shape[1])?
+                (bytes, scales)
             } else {
-                let values = crate::quant::decode_float_bytes(&bytes, *original)?;
-                crate::quant::encode_matrix(&values, encoding, group_size, shape[1])?
-            };
-            hash.update(&codes);
-            writer.write(&codes)?;
-            scales = converted_scales;
-        } else {
-            loader.visit_tensor(name, |input| {
-                hash.update(input);
-                writer.write(input)?;
+                let values = crate::quant::decode_float_bytes(&bytes, original)?;
+                let (codes, scales, global) = crate::quant::nvfp4::encode_serial(&values)?;
+                global_scale = Some(global);
+                crate::quant::nvfp4::pack(&codes, &scales, shape[1], false)?
+            }
+        } else if original.quantized() {
+            loader.visit_scales(name, |input| {
+                scales.extend_from_slice(input);
                 Ok(())
             })?;
-        }
-        let data = Region {
-            offset,
-            bytes: writer.position - offset,
-            blake3: hash.finalize().to_hex().to_string(),
-        };
-        let scales = if scales.is_empty() {
-            None
+            crate::quant::repack(&bytes, &scales, original, encoding, group_size, shape[1])?
         } else {
-            let offset = writer.align()?;
-            writer.write(&scales)?;
-            Some(Region {
-                offset,
-                bytes: scales.len() as u64,
-                blake3: blake3::hash(&scales).to_hex().to_string(),
-            })
+            let values = crate::quant::decode_float_bytes(&bytes, original)?;
+            // Parallelism is across experts here. Avoid nesting the global Rayon
+            // pool inside each worker and oversubscribing the requested CPU count.
+            let (codes, scales) = crate::quant::encode(&values, encoding.row_major(), group_size)?;
+            if encoding.packed() {
+                crate::quant::repack(
+                    &codes,
+                    &scales,
+                    encoding.row_major(),
+                    encoding,
+                    group_size,
+                    shape[1],
+                )?
+            } else {
+                (codes, scales)
+            }
         };
-        let tensor = TensorInfo {
-            shape: shape.clone(),
-            encoding,
-            data,
-            scales,
-            group_size,
+
+        Some(QuantizedTensor {
+            checksum: blake3::hash(&codes).to_hex().to_string(),
+            scale_checksum: blake3::hash(&converted_scales).to_hex().to_string(),
+            codes,
+            scales: converted_scales,
             global_scale,
-        };
-        tensor.validate()?;
-        manifest.tensors.insert(name.clone(), tensor);
-        if index % 256 == 0 || index + 1 == inventory.len() {
-            tracing::info!(
-                tensors = index + 1,
-                total = inventory.len(),
-                gib = writer.position as f64 / 1073741824.,
-                "converting checkpoint"
-            );
-        }
-    }
-    writer.finish(&manifest, destination)
+        })
+    } else {
+        // Large floating tensors are streamed by the writer, never queued.
+        None
+    };
+    Ok(PreparedTensor {
+        encoding,
+        group_size,
+        quantized,
+    })
 }

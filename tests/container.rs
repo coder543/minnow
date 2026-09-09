@@ -413,3 +413,75 @@ fn nvfp4_container_preserves_native_scales_and_rejects_requantization() -> Resul
     );
     Ok(())
 }
+
+#[test]
+fn parallel_conversion_is_byte_identical_and_cleans_up_worker_errors() -> Result<()> {
+    use minnow::container::{Encoding, convert_with_workers};
+    let fixture = Fixture::new()?;
+    let source = fixture.0.join("source");
+    for encoding in [
+        None,
+        Some(Encoding::I4Sym),
+        Some(Encoding::I4Mma),
+        Some(Encoding::I8Mma),
+    ] {
+        let options = Conversion {
+            expert_encoding: encoding,
+            group_size: 16,
+            ..Conversion::default()
+        };
+        let serial = fixture.0.join(format!("serial-{encoding:?}.mnw"));
+        convert_with_workers(&source, &serial, &options, 1)?;
+        for workers in [3, 8] {
+            let parallel = fixture
+                .0
+                .join(format!("parallel-{encoding:?}-{workers}.mnw"));
+            convert_with_workers(&source, &parallel, &options, workers)?;
+            Container::validate(&parallel)?;
+            assert_eq!(
+                std::fs::read(&serial)?,
+                std::fs::read(&parallel)?,
+                "encoding={encoding:?}, workers={workers}"
+            );
+        }
+    }
+    // Failure happens during expert quantization, after the pipeline has started.
+    let weights_path = source.join("model.safetensors");
+    let mut weights = candle_core::safetensors::load(&weights_path, &Device::Cpu)?;
+    let name = weights
+        .keys()
+        .filter(|n| n.contains(".experts."))
+        .min()
+        .unwrap()
+        .clone();
+    let shape = weights[&name].shape().clone();
+    weights.insert(
+        name,
+        candle_core::Tensor::full(f32::NAN, shape, &Device::Cpu)?,
+    );
+    candle_core::safetensors::save(&weights, weights_path)?;
+    let output = fixture.0.join("failed.mnw");
+    let error = convert_with_workers(
+        &source,
+        &output,
+        &Conversion {
+            expert_encoding: Some(Encoding::I4Mma),
+            group_size: 16,
+            ..Conversion::default()
+        },
+        3,
+    )
+    .err()
+    .expect("nonfinite expert must fail");
+    assert!(format!("{error:#}").contains("nonfinite"));
+    assert!(!output.exists());
+    assert!(std::fs::read_dir(&fixture.0)?.all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".tmp")
+    }));
+    assert!(convert_with_workers(&source, &output, &Conversion::default(), 65).is_err());
+    Ok(())
+}

@@ -81,6 +81,9 @@ enum Command {
     /// Convert a checkpoint to a self-contained .mnw file using bounded direct I/O.
     Convert {
         output: PathBuf,
+        /// Conversion workers (0: up to eight CPUs); each uses bounded expert scratch.
+        #[arg(long, default_value_t = 0)]
+        workers: usize,
         /// Quantize routed expert projections; other weights retain their dtype.
         #[arg(long, value_parser = ["original", "int4", "int8", "nvfp4"], default_value = "original")]
         experts: String,
@@ -264,12 +267,13 @@ async fn main() -> Result<()> {
     match &cli.command {
         Command::Convert {
             output,
+            workers,
             experts,
             group_size,
             quant_layout,
             tensor_rules,
         } => {
-            use minnow::container::{Conversion, Encoding, convert};
+            use minnow::container::{Conversion, Encoding, convert_with_workers};
             anyhow::ensure!(
                 experts != "nvfp4" || quant_layout == "mma",
                 "NVFP4 requires its native MMA layout; --quant-layout row is unsupported"
@@ -296,7 +300,7 @@ async fn main() -> Result<()> {
                 },
             };
             let start = Instant::now();
-            let container = convert(&model_path, output, &options)?;
+            let container = convert_with_workers(&model_path, output, &options, *workers)?;
             println!(
                 "{}",
                 json!({"path":output,"file_bytes":container.file_bytes,"weight_bytes":container.manifest.weight_bytes(),"tensors":container.manifest.tensors.len(),"seconds":start.elapsed().as_secs_f64()})

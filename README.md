@@ -102,6 +102,11 @@ Conversion produces a self-contained `.mnw` file with weights, tokenizer,
 configuration, and chat template. It streams the source and does not load a
 complete model into memory. Existing destinations are never overwritten.
 The source may be a safetensors directory or a floating-point `.mnw` file.
+Conversion overlaps direct reads, expert quantization, and ordered writes using
+up to eight CPU workers by default. Use `convert --workers N` to set the worker
+count (1–64). Memory is bounded by per-worker expert scratch and one queued
+result per worker; large unquantized tensors are streamed. Worker count does
+not change the checkpoint bytes.
 
 ```sh
 # Blackwell: native FP4 tensor cores for both prefill and decode.

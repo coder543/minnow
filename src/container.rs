@@ -15,7 +15,7 @@ pub const HEADER_BYTES: usize = 64;
 pub const MAX_MANIFEST_BYTES: u64 = 128 * 1024 * 1024;
 
 mod writer;
-pub use writer::{Conversion, TensorRule, convert};
+pub use writer::{Conversion, TensorRule, convert, convert_with_workers};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]

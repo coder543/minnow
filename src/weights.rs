@@ -351,12 +351,21 @@ impl WeightLoader {
         &self,
         name: &str,
         part: &Location,
-        mut consume: impl FnMut(&[u8]) -> Result<()>,
+        consume: impl FnMut(&[u8]) -> Result<()>,
     ) -> Result<()> {
         let mut staging = self
             .staging
             .lock()
             .map_err(|_| anyhow::anyhow!("weight staging lock poisoned"))?;
+        self.visit_with_staging(name, part, &mut staging, consume)
+    }
+    fn visit_with_staging(
+        &self,
+        name: &str,
+        part: &Location,
+        staging: &mut Staging,
+        mut consume: impl FnMut(&[u8]) -> Result<()>,
+    ) -> Result<()> {
         let mut copied = 0;
         let mut timings = ReadTimings::default();
         let mut hash = blake3::Hasher::new();
@@ -473,6 +482,20 @@ impl WeightLoader {
         self.visit(
             name,
             self.tensors.get(name).context("missing tensor")?,
+            consume,
+        )
+    }
+    /// Independent direct-I/O staging for bounded parallel conversion workers.
+    pub(crate) fn visit_tensor_with_staging(
+        &self,
+        name: &str,
+        staging: &mut Staging,
+        consume: impl FnMut(&[u8]) -> Result<()>,
+    ) -> Result<()> {
+        self.visit_with_staging(
+            name,
+            self.tensors.get(name).context("missing tensor")?,
+            staging,
             consume,
         )
     }
