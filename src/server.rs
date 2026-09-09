@@ -420,7 +420,12 @@ fn execute(
     };
     run().map_err(|e| {
         tracing::error!(error=%e,"generation failed");
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        let status = if e.is::<crate::prefix::CacheBudgetError>() {
+            StatusCode::SERVICE_UNAVAILABLE
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        };
+        ApiError::new(status, e.to_string())
     })
 }
 

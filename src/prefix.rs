@@ -4,7 +4,26 @@ use crate::model::{Cache, Model};
 use anyhow::{Result, ensure};
 use clap::Args;
 use serde::Serialize;
-use std::sync::Arc;
+use std::{
+    cell::RefCell,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
+
+pub(crate) const KV_CHUNK_TOKENS: usize = 2048;
+
+#[derive(Debug)]
+pub(crate) struct CacheBudgetError;
+impl std::fmt::Display for CacheBudgetError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            "KV cache budget exhausted by active requests; retry when capacity is available",
+        )
+    }
+}
+impl std::error::Error for CacheBudgetError {}
 
 #[derive(Clone, Debug, Args, Serialize)]
 pub struct CacheOptions {
@@ -56,7 +75,8 @@ pub(crate) struct Checkout {
     pub slot: Option<usize>,
     pub cached: usize,
     pub copied: usize,
-    reservation: usize,
+    pub(crate) reservation: Arc<AtomicUsize>,
+    pub(crate) context_limit: usize,
 }
 impl Checkout {
     /// An empty response does not run the model or reserve/evict K/V storage.
@@ -66,7 +86,8 @@ impl Checkout {
             slot: None,
             cached: 0,
             copied: 0,
-            reservation: 0,
+            reservation: Arc::new(AtomicUsize::new(0)),
+            context_limit: model.config.max_position_embeddings,
         })
     }
 }
@@ -139,6 +160,80 @@ impl CachePool {
     pub(crate) fn max_context(&self) -> usize {
         self.max_context
     }
+    pub(crate) fn chunk_capacity(&self, required: usize) -> usize {
+        required
+            .div_ceil(KV_CHUNK_TOKENS)
+            .saturating_mul(KV_CHUNK_TOKENS)
+            .min(self.max_context)
+    }
+    pub(crate) fn initial_capacity(
+        &self,
+        prompt_tokens: usize,
+        output_tokens: usize,
+        block: usize,
+    ) -> usize {
+        let required = (prompt_tokens + output_tokens.min(block)).div_ceil(block) * block;
+        self.chunk_capacity(required)
+    }
+    /// Grow only between forwards, with all active reservations charged to this pool.
+    /// False means another active request must release capacity first.
+    pub(crate) fn grow(
+        &mut self,
+        model: &Model,
+        cache: &mut Cache,
+        reservation: &AtomicUsize,
+        slot: Option<usize>,
+        required: usize,
+    ) -> Result<bool> {
+        ensure!(
+            required <= self.max_context,
+            "request exceeds cache context"
+        );
+        if required <= cache.capacity() {
+            return Ok(true);
+        }
+        let capacity = self.chunk_capacity(required);
+        let previous = reservation.load(Ordering::Relaxed);
+        ensure!(
+            previous == cache.capacity(),
+            "cache reservation differs from allocation"
+        );
+        let extra = capacity - previous;
+        if self.active_capacity + extra > self.budget_tokens {
+            return Ok(false);
+        }
+        while self.capacity() + extra > self.budget_tokens {
+            let victim = self
+                .slots
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| !s.busy && s.cache.is_some())
+                .min_by_key(|(_, s)| s.used)
+                .map(|(i, _)| i)
+                .expect("idle cache eviction covers growth within active budget");
+            self.slots[victim].cache = None;
+        }
+        cache.resize(&model.config, capacity)?;
+        self.active_capacity += extra;
+        reservation.store(capacity, Ordering::Relaxed);
+        if let Some(slot) = slot {
+            self.slots[slot].active_capacity = capacity;
+            self.slots[slot].active_cached = cache.len();
+        }
+        Ok(true)
+    }
+    pub(crate) fn executor<'a>(
+        &'a mut self,
+        model: &'a Model,
+        checkout: &Checkout,
+    ) -> impl crate::decode::Executor + 'a {
+        PooledExecutor {
+            model,
+            pool: RefCell::new(self),
+            reservation: checkout.reservation.clone(),
+            slot: checkout.slot,
+        }
+    }
     fn lru(&self, excluded: &[usize]) -> Option<usize> {
         (0..self.slots.len())
             .filter(|i| !excluded.contains(i) && !self.slots[*i].busy)
@@ -154,12 +249,7 @@ impl CachePool {
                 .sum::<usize>()
     }
     pub(crate) fn can_admit(&self, capacity: usize, enabled: bool) -> bool {
-        let capacity = if enabled && !self.slots.is_empty() {
-            capacity.div_ceil(2048) * 2048
-        } else {
-            capacity
-        }
-        .min(self.max_context);
+        let capacity = self.chunk_capacity(capacity);
         self.active_capacity + capacity <= self.budget_tokens
             && (!enabled || self.slots.is_empty() || self.slots.iter().any(|s| !s.busy))
     }
@@ -182,6 +272,7 @@ impl CachePool {
             self.can_admit(capacity, enabled),
             "cache capacity is occupied by active requests"
         );
+        let capacity = self.chunk_capacity(capacity);
         if !enabled || self.slots.is_empty() {
             // A cold request may need the whole memory budget too.
             while self.capacity() + capacity > self.budget_tokens {
@@ -207,7 +298,8 @@ impl CachePool {
                 slot: None,
                 cached: 0,
                 copied: 0,
-                reservation: capacity,
+                reservation: Arc::new(AtomicUsize::new(capacity)),
+                context_limit: self.max_context,
             });
         }
         let b = model.config.block_size;
@@ -245,9 +337,6 @@ impl CachePool {
             Some((i, _)) => self.lru(&[i]).unwrap_or(i),
             None => self.lru(&[]).unwrap(),
         };
-        // Reserve in modest blocks to avoid reallocating for every new turn.
-        let capacity = capacity.div_ceil(2048) * 2048;
-        let mut capacity = capacity.min(self.max_context);
         if let Some((source, _)) = best
             && dest != source
             && self.active_capacity
@@ -257,15 +346,6 @@ impl CachePool {
         {
             // Keeping both branches cannot fit: retain the hit in place.
             dest = source;
-        }
-        if best.is_none_or(|(source, _)| source == dest)
-            && let Some(cache) = &self.slots[dest].cache
-        {
-            capacity = capacity.max(
-                cache
-                    .capacity()
-                    .min(self.budget_tokens - self.active_capacity),
-            );
         }
         let mut excluded = vec![dest];
         if let Some((source, _)) = best {
@@ -314,11 +394,12 @@ impl CachePool {
             slot: Some(dest),
             cached,
             copied,
-            reservation: capacity,
+            reservation: Arc::new(AtomicUsize::new(capacity)),
+            context_limit: self.max_context,
         })
     }
     pub(crate) fn checkin(&mut self, checkout: Checkout) {
-        self.active_capacity -= checkout.reservation;
+        self.active_capacity -= checkout.reservation.load(Ordering::Relaxed);
         if let Some(slot) = checkout.slot {
             self.slots[slot].busy = false;
             self.slots[slot].active_cached = 0;
@@ -327,12 +408,47 @@ impl CachePool {
         }
     }
     pub(crate) fn discard(&mut self, checkout: Checkout) {
-        self.active_capacity -= checkout.reservation;
+        self.active_capacity -= checkout.reservation.load(Ordering::Relaxed);
         if let Some(slot) = checkout.slot {
             self.slots[slot].busy = false;
             self.slots[slot].active_cached = 0;
             self.slots[slot].active_capacity = 0;
         }
+    }
+}
+
+struct PooledExecutor<'a> {
+    model: &'a Model,
+    pool: RefCell<&'a mut CachePool>,
+    reservation: Arc<AtomicUsize>,
+    slot: Option<usize>,
+}
+impl crate::decode::Executor for PooledExecutor<'_> {
+    fn config(&self) -> &crate::config::Config {
+        &self.model.config
+    }
+    fn prefill_chunk_tokens(&self) -> usize {
+        self.model.prefill_chunk_tokens()
+    }
+    fn synchronize(&self) -> Result<()> {
+        Ok(self.model.device().synchronize()?)
+    }
+    fn forward_tokens(
+        &self,
+        tokens: &[u32],
+        cache: &mut Cache,
+        logits: bool,
+    ) -> Result<Option<candle_core::Tensor>> {
+        if !self.pool.borrow_mut().grow(
+            self.model,
+            cache,
+            &self.reservation,
+            self.slot,
+            cache.len() + tokens.len(),
+        )? {
+            return Err(CacheBudgetError.into());
+        }
+        self.model.forward(tokens, cache, logits, None)
     }
 }
 
@@ -347,6 +463,143 @@ mod tests {
 
     fn fixture_model() -> Model {
         Model::load(Path::new("tests/fixtures/tiny"), DType::F32, &Device::Cpu).unwrap()
+    }
+    #[test]
+    fn chunk_growth_preserves_kv_and_accounts_for_active_and_idle_caches() {
+        let mut model = fixture_model();
+        model.config.max_position_embeddings = 8192;
+        let mut pool = CachePool::new(&model, 8192, CacheOptions::default()).unwrap();
+        assert_eq!(pool.initial_capacity(32, 8160, 32), 2048);
+        let mut first = pool.checkout(&model, &[1; 32], 64, true).unwrap();
+        let mut second = pool.checkout(&model, &[2; 32], 64, true).unwrap();
+        assert_eq!(pool.active_capacity, 4096);
+        prefill(&model, &[1; 32], &mut first.cache, || false).unwrap();
+        prefill(&model, &[2; 32], &mut second.cache, || false).unwrap();
+        let expected = model
+            .forward(&[3; 32], &mut first.cache, true, None)
+            .unwrap()
+            .unwrap();
+        for (required, capacity) in [(2049, 4096), (4097, 6144)] {
+            assert!(
+                pool.grow(
+                    &model,
+                    &mut first.cache,
+                    &first.reservation,
+                    first.slot,
+                    required
+                )
+                .unwrap()
+            );
+            assert_eq!(first.cache.capacity(), capacity);
+            assert_eq!(pool.active_capacity, capacity + 2048);
+            let actual = model
+                .forward(&[3; 32], &mut first.cache, true, None)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                (actual - &expected)
+                    .unwrap()
+                    .abs()
+                    .unwrap()
+                    .max_all()
+                    .unwrap()
+                    .to_scalar::<f32>()
+                    .unwrap(),
+                0.0
+            );
+        }
+        assert!(
+            !pool
+                .grow(
+                    &model,
+                    &mut first.cache,
+                    &first.reservation,
+                    first.slot,
+                    6145
+                )
+                .unwrap()
+        );
+        pool.checkin(second);
+        assert!(
+            pool.grow(
+                &model,
+                &mut first.cache,
+                &first.reservation,
+                first.slot,
+                6145
+            )
+            .unwrap()
+        );
+        assert_eq!(pool.capacity(), 8192);
+        assert_eq!(
+            pool.snapshot()
+                .iter()
+                .filter(|s| s.capacity_tokens != 0)
+                .count(),
+            1
+        );
+        pool.checkin(first);
+        let reused = pool.checkout(&model, &[1; 32], 64, true).unwrap();
+        assert_eq!(reused.cached, 32);
+        assert_eq!(
+            reused.cache.capacity(),
+            2048,
+            "short reuse must release unused capacity"
+        );
+        pool.discard(reused);
+        let mut bypass = pool.checkout(&model, &[], 32, false).unwrap();
+        assert!(
+            pool.grow(
+                &model,
+                &mut bypass.cache,
+                &bypass.reservation,
+                bypass.slot,
+                2049
+            )
+            .unwrap()
+        );
+        pool.discard(bypass);
+        assert_eq!(pool.active_capacity, 0);
+        assert_eq!(pool.capacity(), 0);
+    }
+
+    #[test]
+    fn pooled_executor_grows_across_multiple_prefill_and_decode_chunks() {
+        use crate::decode::Executor;
+        let mut model = fixture_model();
+        model.config.max_position_embeddings = 8192;
+        model.set_prefill_chunk_tokens(128).unwrap();
+        let mut pool = CachePool::new(&model, 8192, CacheOptions::default()).unwrap();
+        let mut checkout = pool.checkout(&model, &[], 32, true).unwrap();
+        let prompt = vec![1; 4096];
+        let actual = {
+            let executor = pool.executor(&model, &checkout);
+            prefill(&executor, &prompt, &mut checkout.cache, || false).unwrap();
+            executor
+                .forward_tokens(&[2; 32], &mut checkout.cache, true)
+                .unwrap()
+                .unwrap()
+        };
+        assert_eq!(checkout.cache.capacity(), 6144);
+        let mut full = Cache::new(&model.config, 6144).unwrap();
+        prefill(&model, &prompt, &mut full, || false).unwrap();
+        let expected = model
+            .forward(&[2; 32], &mut full, true, None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (actual - expected)
+                .unwrap()
+                .abs()
+                .unwrap()
+                .max_all()
+                .unwrap()
+                .to_scalar::<f32>()
+                .unwrap(),
+            0.0
+        );
+        pool.discard(checkout);
+        assert_eq!(pool.active_capacity, 0);
     }
     #[test]
     fn active_slots_are_exclusive_and_failed_requests_release_the_budget() {

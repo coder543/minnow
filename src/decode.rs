@@ -657,9 +657,10 @@ pub fn generate_cached_observed(
         "request exceeds model context"
     );
     let prefill_len = prompt.len() / b * b;
-    let mut checkout = pool.checkout(model, &prompt[..prefill_len], total, reuse)?;
+    let capacity = pool.initial_capacity(prompt.len(), max_tokens, b);
+    let mut checkout = pool.checkout(model, &prompt[..prefill_len], capacity, reuse)?;
     let result = generate_in_cache_observed(
-        model,
+        &pool.executor(model, &checkout),
         prompt,
         opts,
         special,
@@ -696,7 +697,7 @@ pub(crate) fn generate_in_cache_observed(
         "invalid prompt tokens"
     );
     let b = model.config().block_size;
-    let max_tokens = opts.output_tokens(prompt.len(), checkout.cache.capacity())?;
+    let max_tokens = opts.output_tokens(prompt.len(), checkout.context_limit)?;
     let requested = prompt
         .len()
         .checked_add(max_tokens)
@@ -707,8 +708,8 @@ pub(crate) fn generate_in_cache_observed(
         / b
         * b;
     ensure!(
-        total <= checkout.cache.capacity(),
-        "request exceeds admitted cache capacity"
+        total <= checkout.context_limit,
+        "request exceeds configured context"
     );
     let prefill_len = prompt.len() / b * b;
     let mut stats = Stats {

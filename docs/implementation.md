@@ -86,8 +86,10 @@ Continuous batching uses bounded host decoder threads that yield transformer
 segments to one GPU worker. Dense/MoE/head work concatenates token rows while
 attention and RoPE operate independently per sequence. Only complete blocks can
 be combined, so block-level expert capacity never spans two conversations.
-Admission reserves K/V before launching a decoder; success returns the prefix,
-failure discards it and releases its reservation. The CUDA allocator retains a
+Admission reserves K/V for the prompt and first output block before launching a
+decoder. The worker grows buffers in 2,048-token chunks between forwards, sharing
+the updated reservation with the decoder. Success returns the prefix; failure
+discards it and releases the full grown reservation. The CUDA allocator retains a
 configurable bounded amount of scratch across the decoder's synchronizations.
 
 The [self-contained format](model-format.md) stores aligned original or quantized

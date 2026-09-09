@@ -45,6 +45,14 @@ Nsight Compute commands and the distinction between full-model and fixture
 measurements. The [optimization follow-up](nvfp4-optimizations.md) includes
 block FlashAttention and the materialized-attention comparison commands.
 
+For concurrent uncapped responses and incremental K/V allocation, run
+`scripts/check_batching.py --model models/mini-int8.mnw --uncapped` under the same
+memory guard. It starts a standalone server with a 512 MiB workspace cache,
+checks four active requests, buffer growth, late admission, and cancellation,
+and records the observed slot capacities. Unit tests separately cover waiting
+for capacity, idle eviction, cancellation while blocked, and full-budget deadlock
+resolution.
+
 ## Independent reference
 
 Python is an oracle, not a runtime dependency. The reference scripts require

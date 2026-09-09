@@ -55,8 +55,12 @@ measurements; current benchmark reports cover shorter contexts.
 - `--attention-chunk-tokens`: attention query tile, default 1024; automatically
   reduced for long key sequences to bound score storage.
 
-Cache allocation follows the prompt plus output reservation and grows in
-2,048-token increments. Idle slots are evicted before allocation. Forks copy only
+Cache allocation starts with the prompt and first output block, then grows during
+generation in 2,048-token chunks (80 MiB for mini BF16). The maximum output is a
+length boundary, not an upfront allocation. Idle slots are evicted before growth;
+active requests wait for capacity, with an explicit error if all are blocked.
+Resizing copies committed K/V one layer at a time; allow temporary space for one
+additional layer during growth. Forks copy only
 an exact committed prefix. During growth, one old layer's K/V may temporarily
 remain allocated alongside its replacement. Attention reads committed K/V
 through views. Four requests do not each reserve an entire maximum-context cache.

@@ -24,8 +24,9 @@ empty list.
 Context defaults to `config.json`'s `max_position_embeddings`: 131,072 for mini and flash.
 `--max-context` can reduce it to a whole number of 32-token blocks. This is a
 per-request prompt-plus-output limit, not an eagerly allocated global cache.
-K/V storage is allocated lazily, with capacity rounded up in 2,048-token increments
-(capped at the context limit). Full-context
+K/V initially covers the prompt and first output block, rounded up to 2,048 tokens.
+It grows in 2,048-token chunks as generation advances, capped at the context limit.
+An uncapped output does not reserve its entire possible context. Full-context
 BF16 K/V alone is 5 GiB (20 layers × K/V × 4 heads × 128 dimensions × 131,072 ×
 2 bytes); working activations require additional memory. The full context is
 advertised by `/health`, `/props`, and `/v1/models`. Advertising it does not imply
@@ -83,9 +84,13 @@ Requests waiting for K/V count toward both `--queue-capacity` and
 Idle prefixes are evicted first; active reservations, including cache-bypass
 requests, count toward the same budget. Long requests can consequently reduce
 the achievable parallelism without reducing the advertised per-request context.
-Requests using the remaining-context output default reserve a full context from
-this shared budget; with the default budget, they run one at a time. Explicit
-smaller output limits allow requests to share the budget concurrently.
+Uncapped requests can run concurrently: reservations track allocated chunks,
+not their maximum possible output. Growth evicts idle caches first and waits
+while other active requests can make progress. New admissions pause during that
+wait. If every active request is blocked on growth, the youngest blocked request
+fails with a capacity error (HTTP 503, or an error event for an existing stream),
+releasing its cache so older requests can continue. This does not silently shorten
+the requested output. Cancellation and failures release all grown chunks.
 
 `--batch-wait-us` defaults to 200 and bounds the time spent collecting ready work.
 A lone active request does not wait for another arrival. `--parallel 1` serializes
@@ -95,6 +100,8 @@ from concurrently queued requests. Inference timings include scheduling between
 forwards once admitted; they exclude time awaiting admission. Changing batch
 composition may change floating-point reduction order and MoE selections, so
 greedy output is not guaranteed bitwise invariant across concurrency levels.
+`kv_growths` counts buffer growth operations; `kv_pressure_rejections` counts
+requests failed to resolve a full-budget wait. `/slots` shows current capacities.
 
 ## Routes and request options
 
