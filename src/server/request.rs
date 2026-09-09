@@ -335,10 +335,12 @@ pub fn prepare(
     }
     if let Some(v) = body.get("seed").filter(|v| !v.is_null()) {
         options.seed = if v.as_i64() == Some(-1) {
-            rand::random()
+            None
         } else {
-            v.as_u64()
-                .ok_or_else(|| ApiError::invalid("seed must be nonnegative or -1"))?
+            Some(
+                v.as_u64()
+                    .ok_or_else(|| ApiError::invalid("seed must be nonnegative or -1"))?,
+            )
         };
     }
     let mut tools = tools(&body["tools"])?;

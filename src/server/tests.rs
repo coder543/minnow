@@ -199,6 +199,58 @@ async fn body(response: Response) -> (StatusCode, Vec<u8>) {
 }
 
 #[tokio::test]
+async fn request_seeds_inherit_defaults_and_random_sentinel_round_trips_through_props() {
+    for default_seed in [None, Some(0), Some(42), Some(u64::MAX)] {
+        let (mut app, _rx) = app();
+        Arc::get_mut(&mut app.info).unwrap().defaults.seed = default_seed;
+        let prepare = |body| request::prepare(body, Kind::Completion, &app.codec, &app.info);
+        assert_eq!(
+            prepare(json!({"prompt":[1,2]})).unwrap().options.seed,
+            default_seed
+        );
+        for (seed, expected) in [
+            (json!(null), default_seed),
+            (json!(-1), None),
+            (json!(0), Some(0)),
+            (json!(123), Some(123)),
+            (json!(u64::MAX), Some(u64::MAX)),
+        ] {
+            assert_eq!(
+                prepare(json!({"prompt":[1,2],"seed":seed}))
+                    .unwrap()
+                    .options
+                    .seed,
+                expected
+            );
+        }
+        for seed in [json!(-2), json!(0.5), json!("42")] {
+            assert!(prepare(json!({"prompt":[1,2],"seed":seed})).is_err());
+        }
+        let response = router(app.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/props")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, bytes) = body(response).await;
+        assert_eq!(status, StatusCode::OK);
+        let props: Value = serde_json::from_slice(&bytes).unwrap();
+        let seed = &props["default_generation_settings"]["params"]["seed"];
+        assert_eq!(*seed, default_seed.map_or(json!(-1), |n| json!(n)));
+        assert_eq!(
+            prepare(json!({"prompt":[1,2],"seed":seed}))
+                .unwrap()
+                .options
+                .seed,
+            default_seed
+        );
+    }
+}
+
+#[tokio::test]
 async fn output_defaults_and_webui_limits_use_remaining_context() {
     for default_limit in [None, Some(16), Some(1024)] {
         let (mut app, _rx) = app();

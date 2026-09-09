@@ -718,6 +718,8 @@ async fn main() -> Result<()> {
                     .context("case requires max_tokens")? as usize;
                 let options = Options {
                     max_tokens: Some(max_tokens),
+                    // Keep benchmark runs reproducible independently of serving defaults.
+                    seed: Some(42),
                     ..Options::default()
                 };
                 ensure!(
@@ -809,6 +811,27 @@ mod backend_tests {
                     _ => unreachable!(),
                 };
                 assert_eq!(actual, limit);
+            }
+        }
+    }
+
+    #[test]
+    fn seed_is_optional_and_explicit_values_are_preserved() {
+        for command in ["serve", "generate"] {
+            for seed in [None, Some(0u64), Some(42), Some(u64::MAX)] {
+                let mut args = vec!["minnow".to_owned(), command.to_owned()];
+                if command == "generate" {
+                    args.push("hello".into());
+                }
+                if let Some(seed) = seed {
+                    args.extend(["--seed".into(), seed.to_string()]);
+                }
+                let options = match Cli::try_parse_from(args).unwrap().command {
+                    Command::Serve { options, .. } | Command::Generate { options, .. } => options,
+                    _ => unreachable!(),
+                };
+                assert_eq!(options.seed, seed);
+                assert_eq!(options.temperature, 0.0);
             }
         }
     }

@@ -156,3 +156,49 @@ fn zero_steps_resolves_all_masks_without_division_by_zero() {
     assert_eq!(ids, vec![1; 4]);
     assert_eq!(steps, 1);
 }
+
+#[test]
+fn generation_randomizes_omitted_seeds_and_reproduces_explicit_seeds() {
+    use candle_core::DType;
+    use minnow::{decode::generate, model::Model};
+    let model = Model::load(
+        std::path::Path::new("tests/fixtures/tiny"),
+        DType::F32,
+        &Device::Cpu,
+    )
+    .unwrap();
+    let mut opts = Options {
+        max_tokens: Some(32),
+        temperature: 1.0,
+        steps: 1,
+        max_post_steps: 0,
+        editing_threshold: 1.0,
+        ..Options::default()
+    };
+    assert_eq!(opts.seed, None);
+    assert_eq!(serde_json::from_str::<Options>("{}").unwrap().seed, None);
+    let special = SpecialTokens {
+        mask: 258,
+        delete: 256,
+        split: 257,
+        eos: 255,
+    };
+    let run = |opts: &Options| {
+        generate(&model, &[1; 32], opts, special, || false)
+            .unwrap()
+            .token_ids
+    };
+    let random: std::collections::HashSet<_> = (0..3).map(|_| run(&opts)).collect();
+    assert!(
+        random.len() > 1,
+        "separate generations reused the same random stream"
+    );
+    for seed in [0, 42] {
+        opts.seed = Some(seed);
+        assert_eq!(
+            run(&opts),
+            run(&opts),
+            "explicit seed did not reproduce sampling"
+        );
+    }
+}

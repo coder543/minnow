@@ -35,7 +35,13 @@ a completed full-length performance or soak test.
 Defaults: parallel 4, queue 8, no output cap within the remaining context,
 greedy sampling, threshold 0.5, editing_threshold 0, max_post_steps 16,
 steps 32, max_steps_per_block 1000,
-top_k 0, top_p 1, seed 42. All decoding defaults have `serve --...` arguments.
+top_k 0, top_p 1, and a fresh random seed per generation. Greedy temperature 0
+matches upstream mini and flash defaults; set `temperature` above zero to sample.
+All decoding defaults have `serve --...` arguments. `--seed N` fixes the seed for
+CLI generation or supplies a server default. Requests can override it with
+`seed: N`; `seed: -1` selects fresh randomness even when the server has a fixed
+seed. An omitted or null request seed inherits the server default. `/props`
+advertises `seed: -1` when seeds are random.
 `serve --max-tokens N` sets a smaller default output budget; requests may override
 it. Without that flag, responses continue until EOS, a stop string, cancellation,
 or the context limit. The `generate` command uses the same output-limit default.

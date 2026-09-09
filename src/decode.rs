@@ -30,8 +30,9 @@ pub struct Options {
     pub top_k: usize,
     #[arg(long, default_value_t = 1.0)]
     pub top_p: f32,
-    #[arg(long, default_value_t = 42)]
-    pub seed: u64,
+    /// Random seed; omitted chooses fresh randomness for each generation.
+    #[arg(long)]
+    pub seed: Option<u64>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -45,7 +46,7 @@ impl Default for Options {
             max_steps_per_block: 1000,
             top_k: 0,
             top_p: 1.0,
-            seed: 42,
+            seed: None,
         }
     }
 }
@@ -752,7 +753,7 @@ pub(crate) fn generate_in_cache_observed(
     )?;
     stats.prefill_tokens = prefill_len - stats.cached_tokens;
     stats.prefill_seconds = prefill_start.elapsed().as_secs_f64();
-    let mut rng = StdRng::seed_from_u64(opts.seed);
+    let mut rng = StdRng::seed_from_u64(opts.seed.unwrap_or_else(rand::random));
     let mut all = prompt[..prefill_len].to_vec();
     let mut finish = "length";
     let mut batches = Vec::new();

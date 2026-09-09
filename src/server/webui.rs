@@ -25,7 +25,7 @@ async fn props(State(app): State<App>) -> Json<Value> {
         "webui":app.info.ui_dir.is_some(),"cors_proxy_enabled":false,
         "ui_settings":{"showMessageStats":true,"showToolCalls":true,"enableContinueGeneration":false},
         "default_generation_settings":{"id":0,"id_task":-1,"n_ctx":app.info.max_context,"speculative":false,"is_processing":false,"prompt":"",
-            "params":{"n_predict":max_tokens,"max_tokens":max_tokens,"seed":o.seed,"temperature":o.temperature,"top_k":o.top_k,"top_p":o.top_p,
+            "params":{"n_predict":max_tokens,"max_tokens":max_tokens,"seed":o.seed.map_or(json!(-1), |seed| json!(seed)),"temperature":o.temperature,"top_k":o.top_k,"top_p":o.top_p,
                 "dynatemp_range":0,"dynatemp_exponent":1,"min_p":0,"top_n_sigma":0,"xtc_probability":0,"xtc_threshold":0.1,"typ_p":1,
                 "repeat_last_n":64,"repeat_penalty":1,"presence_penalty":0,"frequency_penalty":0,"dry_multiplier":0,"dry_base":1.75,"dry_allowed_length":2,"dry_penalty_last_n":-1,"dry_sequence_breakers":[],
                 "mirostat":0,"mirostat_tau":5,"mirostat_eta":0.1,"stop":[],"n_keep":0,"n_discard":0,"ignore_eos":false,"stream":true,"logit_bias":[],"n_probs":0,"min_keep":0,
