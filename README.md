@@ -130,12 +130,15 @@ acceleration is not supported by this build; those systems can use the CPU path.
 ## Quantization
 
 The downloads above are ready to run. To create your own quantizations, use the
-BF16 `.mnw` file from the same Hugging Face repository as the source.
+BF16 `.mnw` file from the same Hugging Face repository, or an original upstream
+safetensors checkout from `inclusionAI/LLaDA2.2-mini` or
+`inclusionAI/LLaDA2.2-flash`. For an upstream checkout, include its configuration,
+tokenizer, and chat template, and pass the directory to `--model` in the commands
+below instead of the BF16 `.mnw` path.
 
 Conversion produces a self-contained `.mnw` file with weights, tokenizer,
 configuration, and chat template. It streams the source and does not load a
 complete model into memory. Existing destinations are never overwritten.
-The source may be a safetensors directory or a floating-point `.mnw` file.
 Conversion overlaps direct reads, expert quantization, and ordered writes using
 up to eight CPU workers by default. Use `convert --workers N` to set the worker
 count (1–64). Memory is bounded by per-worker expert scratch and one queued
