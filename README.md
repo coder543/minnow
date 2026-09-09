@@ -10,7 +10,8 @@ the client with prefill progress, useful token rates, and refinement statistics.
 
 ## Measured performance
 
-### DGX Spark (GB10)
+<details>
+<summary>DGX Spark (GB10)</summary>
 
 LLaDA2.2-mini, one request at a time, CUDA 13. Minnow uses block FlashAttention,
 BF16 dense layers, and a 512 MiB workspace cache; the upstream Transformers
@@ -34,7 +35,10 @@ Responses and refinement counts differ across implementations and precisions;
 React reaches the output cap in every row. These are throughput measurements,
 not a claim of equal answer quality. See [Spark settings and samples](docs/spark-performance.md).
 
-### RTX 3090 (24 GiB)
+</details>
+
+<details>
+<summary>RTX 3090 (24 GiB)</summary>
 
 LLaDA2.2-mini, one request at a time, CUDA 13, a 420 W GPU power limit, BF16 dense
 layers, FlashAttention, and a 512 MiB workspace cache. Rates below are **tokens/second**:
@@ -57,6 +61,8 @@ The BF16 Transformers reference is not benchmarked on this GPU: its weights
 alone require about 30.3 GiB, exceeding the 24 GiB VRAM before activations or K/V.
 Layerwise reference checks fit, but do not measure end-to-end generation speed.
 
+</details>
+
 ## Requirements
 
 - Linux and Rust. CPU builds require no CUDA installation.
@@ -74,8 +80,8 @@ memory for K/V, activations, and CUDA workspaces. See [memory configuration](doc
 ## Build and run
 
 Download [LLaDA2.2-mini](https://huggingface.co/inclusionAI/LLaDA2.2-mini) or
-[LLaDA2.2-flash](https://huggingface.co/inclusionAI/LLaDA2.2-flash), including its
-configuration, tokenizer, and chat template. Pass the checkpoint location
+[LLaDA2.2-flash](https://huggingface.co/inclusionAI/LLaDA2.2-flash) from Hugging Face,
+including its configuration, tokenizer, and chat template. Pass the checkpoint location
 explicitly with `--model`; there is no assumed installation directory.
 
 Preconverted BF16, INT8, INT4, and NVFP4 containers are available for
