@@ -11,8 +11,9 @@ use std::{collections::HashSet, time::Instant};
 #[derive(Clone, Debug, Args, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Options {
-    #[arg(long, default_value_t = 256)]
-    pub max_tokens: usize,
+    /// Maximum new tokens; omitted means no output cap within the available context.
+    #[arg(long)]
+    pub max_tokens: Option<usize>,
     #[arg(long, default_value_t = 0.0)]
     pub temperature: f32,
     #[arg(long, default_value_t = 0.5)]
@@ -35,7 +36,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            max_tokens: 256,
+            max_tokens: None,
             temperature: 0.0,
             threshold: 0.5,
             editing_threshold: 0.0,
@@ -49,6 +50,15 @@ impl Default for Options {
     }
 }
 impl Options {
+    pub fn output_tokens(&self, prompt_tokens: usize, context_tokens: usize) -> Result<usize> {
+        let remaining = context_tokens
+            .checked_sub(prompt_tokens)
+            .context("prompt exceeds context")?;
+        let limit = self.max_tokens.unwrap_or(remaining);
+        ensure!(limit <= remaining, "request exceeds context");
+        Ok(limit)
+    }
+
     pub fn validate(&self, vocab: usize) -> Result<()> {
         ensure!(
             self.temperature.is_finite() && self.temperature >= 0.0,
@@ -623,7 +633,8 @@ pub fn generate_cached_observed(
         prompt_tokens: prompt.len(),
         ..Stats::default()
     };
-    if opts.max_tokens == 0 {
+    let max_tokens = opts.output_tokens(prompt.len(), pool.max_context())?;
+    if max_tokens == 0 {
         return Ok(Generation {
             token_ids: vec![],
             finish_reason: "length".into(),
@@ -634,7 +645,7 @@ pub fn generate_cached_observed(
     let b = model.config.block_size;
     let requested = prompt
         .len()
-        .checked_add(opts.max_tokens)
+        .checked_add(max_tokens)
         .ok_or_else(|| anyhow::anyhow!("context length overflow"))?;
     let total = requested
         .checked_add(b - 1)
@@ -685,9 +696,10 @@ pub(crate) fn generate_in_cache_observed(
         "invalid prompt tokens"
     );
     let b = model.config().block_size;
+    let max_tokens = opts.output_tokens(prompt.len(), checkout.cache.capacity())?;
     let requested = prompt
         .len()
-        .checked_add(opts.max_tokens)
+        .checked_add(max_tokens)
         .context("context length overflow")?;
     let total = requested
         .checked_add(b - 1)
@@ -707,7 +719,7 @@ pub(crate) fn generate_in_cache_observed(
         cache_seconds: start.elapsed().as_secs_f64(),
         ..Stats::default()
     };
-    if opts.max_tokens == 0 {
+    if max_tokens == 0 {
         return Ok(Generation {
             token_ids: vec![],
             finish_reason: "length".into(),

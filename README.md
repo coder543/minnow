@@ -206,6 +206,8 @@ target/release/minnow --model models/mini-nvfp4.mnw serve \
 with `serve --threshold`, `--editing-threshold`, and `--max-post-steps`.
 The full model context is exposed by default. `--max-context`, `--parallel`,
 `--cache-slots`, and `--cache-max-mib` control request and cache capacity.
+Responses have no default output-token cap within that context. Use
+`--max-tokens` or a request's token limit to set an explicit output budget.
 See [API, caching, and UI configuration](docs/api.md).
 
 ## Development and performance

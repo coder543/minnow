@@ -177,7 +177,7 @@ fn observed_generation_preserves_outputs_and_reports_only_final_blocks() {
     let model = Model::load(Path::new("tests/fixtures/tiny"), DType::F32, &Device::Cpu).unwrap();
     let prompt = vec![1; 35];
     let options = Options {
-        max_tokens: 64,
+        max_tokens: Some(64),
         steps: 1,
         max_post_steps: 0,
         ..Options::default()

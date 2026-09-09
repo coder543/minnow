@@ -387,13 +387,8 @@ async fn main() -> Result<()> {
             } else {
                 codec.chat_prompt(&[json!({"role":"user","content":prompt})])?
             };
-            let result = generate(
-                &model,
-                &codec.encode(&text)?,
-                &options,
-                SpecialTokens::default(),
-                || false,
-            )?;
+            let ids = codec.encode(&text)?;
+            let result = generate(&model, &ids, &options, SpecialTokens::default(), || false)?;
             let text = codec.decode(&result.token_ids)?;
             if as_json {
                 println!("{}", json!({"text":text,"generation":result}));
@@ -715,21 +710,21 @@ async fn main() -> Result<()> {
                     .as_array()
                     .context("case requires messages")?;
                 let prompt = codec.encode(&codec.chat_prompt(messages)?)?;
+                let max_tokens = case["max_tokens"]
+                    .as_u64()
+                    .context("case requires max_tokens")? as usize;
                 let options = Options {
-                    max_tokens: case["max_tokens"]
-                        .as_u64()
-                        .context("case requires max_tokens")?
-                        as usize,
+                    max_tokens: Some(max_tokens),
                     ..Options::default()
                 };
                 ensure!(
-                    (1..=8192).contains(&options.max_tokens),
+                    (1..=8192).contains(&max_tokens),
                     "decode benchmark max_tokens must be between 1 and 8192"
                 );
                 ensure!(
                     prompt
                         .len()
-                        .checked_add(options.max_tokens)
+                        .checked_add(max_tokens)
                         .is_some_and(|n| n <= 8192),
                     "decode benchmark context exceeds 8192 tokens"
                 );
@@ -792,6 +787,29 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod backend_tests {
     use super::*;
+    #[test]
+    fn output_limits_are_optional_and_explicit_zero_is_preserved() {
+        for command in ["serve", "generate"] {
+            for limit in [None, Some(0), Some(256), Some(8192)] {
+                let mut args = vec!["minnow".to_owned(), command.to_owned()];
+                if command == "generate" {
+                    args.push("hello".to_owned());
+                }
+                if let Some(limit) = limit {
+                    args.extend(["--max-tokens".to_owned(), limit.to_string()]);
+                }
+                let parsed = Cli::try_parse_from(args).unwrap();
+                let actual = match parsed.command {
+                    Command::Serve { options, .. } | Command::Generate { options, .. } => {
+                        options.max_tokens
+                    }
+                    _ => unreachable!(),
+                };
+                assert_eq!(actual, limit);
+            }
+        }
+    }
+
     #[test]
     fn cpu_and_invalid_device_selection() {
         assert!(device("cpu").unwrap().is_cpu());

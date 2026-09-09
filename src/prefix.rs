@@ -136,6 +136,9 @@ impl CachePool {
     pub fn budget_bytes(&self, model: &Model) -> usize {
         self.budget_tokens * model.kv_bytes_per_token()
     }
+    pub(crate) fn max_context(&self) -> usize {
+        self.max_context
+    }
     fn lru(&self, excluded: &[usize]) -> Option<usize> {
         (0..self.slots.len())
             .filter(|i| !excluded.contains(i) && !self.slots[*i].busy)
@@ -507,6 +510,35 @@ mod tests {
         assert!(pool.capacity() <= pool.budget_tokens);
     }
     #[test]
+    fn uncapped_generation_respects_a_smaller_cache_context() {
+        let model = fixture_model();
+        let mut pool = CachePool::new(&model, 128, CacheOptions::default()).unwrap();
+        let options = Options {
+            steps: 1,
+            max_post_steps: 0,
+            ..Options::default()
+        };
+        let special = SpecialTokens {
+            mask: 258,
+            delete: 256,
+            split: 257,
+            eos: 255,
+        };
+        let result = generate_cached_observed(
+            &model,
+            &[1; 32],
+            &options,
+            special,
+            (&mut pool, true),
+            || false,
+            |_| Ok(true),
+        )
+        .unwrap();
+        assert!(result.token_ids.len() <= 96);
+        assert!(pool.snapshot().iter().any(|s| s.capacity_tokens == 128));
+    }
+
+    #[test]
     fn warm_generation_matches_cold_and_counts_only_new_work() {
         let model = fixture_model();
         let mut pool = CachePool::new(
@@ -525,7 +557,7 @@ mod tests {
             eos: 255,
         };
         let options = Options {
-            max_tokens: 64,
+            max_tokens: Some(64),
             steps: 1,
             max_post_steps: 0,
             ..Options::default()

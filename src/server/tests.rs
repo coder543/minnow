@@ -92,7 +92,7 @@ fn defaults_and_partial_request_overrides_compose() {
     assert_eq!(p.options.threshold, 0.6);
     assert_eq!(p.options.editing_threshold, 0.3);
     assert_eq!(p.options.max_post_steps, 5);
-    assert_eq!(p.options.max_tokens, 16);
+    assert_eq!(p.options.max_tokens, Some(16));
     for (key, value) in [
         ("threshold", json!(-0.1)),
         ("editing_threshold", json!(1.1)),
@@ -196,6 +196,59 @@ async fn body(response: Response) -> (StatusCode, Vec<u8>) {
             .to_bytes()
             .to_vec(),
     )
+}
+
+#[tokio::test]
+async fn output_defaults_and_webui_limits_use_remaining_context() {
+    for default_limit in [None, Some(16), Some(1024)] {
+        let (mut app, _rx) = app();
+        let info = Arc::get_mut(&mut app.info).unwrap();
+        info.max_context = 1024;
+        info.defaults.max_tokens = default_limit;
+        let response = router(app.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/props")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, bytes) = body(response).await;
+        assert_eq!(status, StatusCode::OK);
+        let props: Value = serde_json::from_slice(&bytes).unwrap();
+        let params = &props["default_generation_settings"]["params"];
+        let expected = default_limit.unwrap_or(1022).min(1022);
+        let prepare = |body| request::prepare(body, Kind::Completion, &app.codec, &app.info);
+        let omitted = prepare(json!({"prompt":[1,2]})).unwrap();
+        assert_eq!(omitted.options.max_tokens, Some(expected));
+        for key in ["max_tokens", "n_predict"] {
+            assert_eq!(params[key], if default_limit == Some(16) { 16 } else { -1 });
+            let mut request = json!({"prompt":[1,2]});
+            request[key] = params[key].clone();
+            assert_eq!(prepare(request).unwrap().options.max_tokens, Some(expected));
+        }
+        for key in ["max_completion_tokens", "max_tokens", "n_predict"] {
+            for (limit, expected) in [
+                (json!(null), expected),
+                (json!(-1), 1022),
+                (json!(0), 0),
+                (json!(512), 512),
+            ] {
+                let mut request = json!({"prompt":[1,2]});
+                request[key] = limit;
+                assert_eq!(prepare(request).unwrap().options.max_tokens, Some(expected));
+            }
+        }
+        assert!(prepare(json!({"prompt":[1,2],"max_tokens":1024})).is_err());
+        assert_eq!(
+            prepare(json!({"prompt":[1,2],"max_tokens":512,"max_completion_tokens":32}))
+                .unwrap()
+                .options
+                .max_tokens,
+            Some(32)
+        );
+    }
 }
 
 #[tokio::test]

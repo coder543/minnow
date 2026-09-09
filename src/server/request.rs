@@ -424,20 +424,21 @@ pub fn prepare(
             .as_i64()
             .filter(|n| *n >= -1)
             .ok_or_else(|| ApiError::invalid("token limit must be nonnegative or -1"))?;
-        options.max_tokens = if n == -1 {
-            info.max_context - ids.len()
-        } else {
-            n as usize
-        };
+        options.max_tokens = if n == -1 { None } else { Some(n as usize) };
     } else {
-        options.max_tokens = options.max_tokens.min(info.max_context - ids.len());
+        options.max_tokens = options
+            .max_tokens
+            .map(|n| n.min(info.max_context - ids.len()));
     }
-    if options.max_tokens > info.max_context - ids.len() {
+    let max_tokens = options.max_tokens.unwrap_or(info.max_context - ids.len());
+    if max_tokens > info.max_context - ids.len() {
         return Err(ApiError::context(
-            ids.len().saturating_add(options.max_tokens),
+            ids.len().saturating_add(max_tokens),
             info.max_context,
         ));
     }
+    // Admission and generation share the resolved physical context boundary.
+    options.max_tokens = Some(max_tokens);
     options
         .validate(info.vocab_size)
         .map_err(|e| ApiError::invalid(e.to_string()))?;

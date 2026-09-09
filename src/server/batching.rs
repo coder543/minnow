@@ -153,9 +153,13 @@ pub(super) fn run(
                     continue;
                 }
                 let b = model.config.block_size;
-                let capacity =
-                    (job.request.ids.len() + job.request.options.max_tokens).div_ceil(b) * b;
-                let empty = job.request.options.max_tokens == 0;
+                let max_tokens = job
+                    .request
+                    .options
+                    .max_tokens
+                    .unwrap_or(app.info.max_context - job.request.ids.len());
+                let capacity = (job.request.ids.len() + max_tokens).div_ceil(b) * b;
+                let empty = max_tokens == 0;
                 if !empty && !pool.can_admit(capacity, job.request.cache_prompt) {
                     break;
                 }

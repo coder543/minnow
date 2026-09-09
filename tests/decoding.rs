@@ -2,6 +2,29 @@ use candle_core::{Device, Tensor};
 use minnow::decode::{Options, SpecialTokens, apply_edits, decode_block};
 use rand::{SeedableRng, rngs::StdRng};
 
+#[test]
+fn omitted_output_limit_is_uncapped_until_context_exhaustion() {
+    let options = Options::default();
+    assert_eq!(options.max_tokens, None);
+    assert_eq!(
+        serde_json::from_str::<Options>("{}").unwrap().max_tokens,
+        None
+    );
+    assert_eq!(options.output_tokens(32, 131072).unwrap(), 131040);
+    assert_eq!(options.output_tokens(131072, 131072).unwrap(), 0);
+    assert!(options.output_tokens(131073, 131072).is_err());
+    let limited = Options {
+        max_tokens: Some(512),
+        ..options.clone()
+    };
+    assert_eq!(limited.output_tokens(32, 131072).unwrap(), 512);
+    assert!(limited.output_tokens(131000, 131072).is_err());
+    let prefill_only = Options {
+        max_tokens: Some(0),
+        ..options
+    };
+    assert_eq!(prefill_only.output_tokens(32, 131072).unwrap(), 0);
+}
 const S: SpecialTokens = SpecialTokens {
     mask: 7,
     delete: 8,

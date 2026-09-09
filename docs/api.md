@@ -31,9 +31,13 @@ BF16 K/V alone is 5 GiB (20 layers × K/V × 4 heads × 128 dimensions × 131,07
 advertised by `/health`, `/props`, and `/v1/models`. Advertising it does not imply
 a completed full-length performance or soak test.
 
-Defaults: parallel 4, queue 8, maximum output 256, greedy sampling, threshold 0.5,
-editing_threshold 0, max_post_steps 16, steps 32, max_steps_per_block 1000,
+Defaults: parallel 4, queue 8, no output cap within the remaining context,
+greedy sampling, threshold 0.5, editing_threshold 0, max_post_steps 16,
+steps 32, max_steps_per_block 1000,
 top_k 0, top_p 1, seed 42. All decoding defaults have `serve --...` arguments.
+`serve --max-tokens N` sets a smaller default output budget; requests may override
+it. Without that flag, responses continue until EOS, a stop string, cancellation,
+or the context limit. The `generate` command uses the same output-limit default.
 
 ### Conversation prefix slots
 
@@ -79,6 +83,9 @@ Requests waiting for K/V count toward both `--queue-capacity` and
 Idle prefixes are evicted first; active reservations, including cache-bypass
 requests, count toward the same budget. Long requests can consequently reduce
 the achievable parallelism without reducing the advertised per-request context.
+Requests using the remaining-context output default reserve a full context from
+this shared budget; with the default budget, they run one at a time. Explicit
+smaller output limits allow requests to share the budget concurrently.
 
 `--batch-wait-us` defaults to 200 and bounds the time spent collecting ready work.
 A lone active request does not wait for another arrival. `--parallel 1` serializes
@@ -105,8 +112,10 @@ Supported controls include `max_completion_tokens` (preferred), `max_tokens`,
 `temperature`, `top_p`, `top_k`, `seed`, `stop`, `n: 1`, `stream`, and
 `stream_options.include_usage`. The llama-server `n_predict` alias is accepted;
 `-1` uses remaining context. An omitted output limit uses the server default,
-clamped to remaining context. Stops are held across block boundaries and stop
-further block generation once matched. Disconnects cancel queued or active work
+clamped to remaining context. `/props` advertises `max_tokens` and `n_predict` as
+`-1` when the default uses remaining context, including for the web UI.
+An explicitly saved client limit still applies. Stops are held across block
+boundaries and stop further block generation once matched. Disconnects cancel queued or active work
 at the next forward boundary.
 
 Diffusion controls `threshold`, `editing_threshold`, `max_post_steps`, `steps`,
