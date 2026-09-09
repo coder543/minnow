@@ -79,14 +79,12 @@ memory for K/V, activations, and CUDA workspaces. See [memory configuration](doc
 
 ## Build and run
 
-Download [LLaDA2.2-mini](https://huggingface.co/inclusionAI/LLaDA2.2-mini) or
-[LLaDA2.2-flash](https://huggingface.co/inclusionAI/LLaDA2.2-flash) from Hugging Face,
-including its configuration, tokenizer, and chat template. Pass the checkpoint location
-explicitly with `--model`; there is no assumed installation directory.
-
-Preconverted BF16, INT8, INT4, and NVFP4 containers are available for
-[mini](https://huggingface.co/coder543/LLaDA2.2-mini-minnow) and
-[flash](https://huggingface.co/coder543/LLaDA2.2-flash-minnow):
+Download a converted `.mnw` checkpoint for
+[LLaDA2.2-mini](https://huggingface.co/coder543/LLaDA2.2-mini-minnow) or
+[LLaDA2.2-flash](https://huggingface.co/coder543/LLaDA2.2-flash-minnow) from Hugging Face.
+BF16, INT8, INT4, and NVFP4 files are available. Each file includes the weights,
+configuration, tokenizer, and chat template; no separate model files or conversion
+are needed. Pass its location explicitly with `--model`.
 
 ```sh
 hf download coder543/LLaDA2.2-mini-minnow \
@@ -98,11 +96,11 @@ hf download coder543/LLaDA2.2-mini-minnow \
 cargo build --release --features cuda
 
 # Generate a response in the terminal.
-target/release/minnow --model models/LLaDA2.2-mini \
+target/release/minnow --model models/llada2.2-mini-int4.mnw \
   generate 'What is the LHC?' --max-tokens 1024
 
 # Start the OpenAI-compatible Chat Completions API server.
-target/release/minnow --model models/LLaDA2.2-mini serve --listen 127.0.0.1:8080
+target/release/minnow --model models/llada2.2-mini-int4.mnw serve --listen 127.0.0.1:8080
 ```
 
 The first CUDA build fetches pinned CUTLASS headers through CudaForge; subsequent
@@ -113,7 +111,7 @@ Serving and checkpoint conversion do not require Python. For a CPU-only build:
 ```sh
 cargo build --release
 
-target/release/minnow --model models/mini-int8.mnw --device cpu serve
+target/release/minnow --model models/llada2.2-mini-int4.mnw --device cpu serve
 ```
 
 `--device auto` (the default) selects CUDA when available, otherwise CPU.
@@ -131,6 +129,9 @@ acceleration is not supported by this build; those systems can use the CPU path.
 
 ## Quantization
 
+The downloads above are ready to run. To create your own quantizations, use the
+BF16 `.mnw` file from the same Hugging Face repository as the source.
+
 Conversion produces a self-contained `.mnw` file with weights, tokenizer,
 configuration, and chat template. It streams the source and does not load a
 complete model into memory. Existing destinations are never overwritten.
@@ -142,19 +143,21 @@ result per worker; large unquantized tensors are streamed. Worker count does
 not change the checkpoint bytes.
 
 ```sh
+hf download coder543/LLaDA2.2-mini-minnow \
+  llada2.2-mini-bf16.mnw \
+  --local-dir models
+
 # Blackwell: native FP4 tensor cores for both prefill and decode.
-target/release/minnow --model models/LLaDA2.2-mini \
-  convert models/mini-nvfp4.mnw --experts nvfp4
+target/release/minnow --model models/llada2.2-mini-bf16.mnw \
+  convert models/custom-mini-nvfp4.mnw --experts nvfp4
 
 # Ampere and newer: INT8 weights with BF16 activations.
-target/release/minnow --model models/LLaDA2.2-mini \
-  convert models/mini-int8.mnw --experts int8
+target/release/minnow --model models/llada2.2-mini-bf16.mnw \
+  convert models/custom-mini-int8.mnw --experts int8
 
 # Quantize directly from a self-contained BF16 checkpoint.
 target/release/minnow --model models/llada2.2-mini-bf16.mnw \
-  convert models/llada2.2-mini-int4.mnw --experts int4
-
-target/release/minnow --model models/mini-nvfp4.mnw serve
+  convert models/custom-mini-int4.mnw --experts int4
 ```
 
 NVFP4 uses E2M1 weights and activations, E4M3 scales per 16 values, and FP32
@@ -162,7 +165,7 @@ accumulation. INT4 and INT8 use groups of 128 weights with FP16 scales and dequa
 into BF16 tensor-core registers by default. All quantizations change model numerics; throughput results
 are not evidence of equal answer quality. Convert from floating-point weights.
 `--tensor-rules` permits mixed precision by layer or projection.
-Use `minnow --model models/mini-int8.mnw validate` to verify checkpoint
+Use `minnow --model models/llada2.2-mini-int4.mnw validate` to verify checkpoint
 checksums separately from loading. See [formats and conversion](docs/model-format.md).
 
 `--int8-expert-activations` opts an instance with INT4/INT8 weights into W4A8/W8A8
@@ -198,7 +201,7 @@ its output directory. Minnow serves those files directly; it does not bundle or
 copy the UI. The UI is optional and no Docker or separate proxy is required.
 
 ```sh
-target/release/minnow --model models/mini-nvfp4.mnw serve \
+target/release/minnow --model models/llada2.2-mini-int4.mnw serve \
   --ui-dir ../llama.cpp/build/tools/ui/dist
 ```
 
